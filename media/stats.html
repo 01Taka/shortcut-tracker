@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: var(--vscode-font-family);
+      color: var(--vscode-foreground);
+      padding: 24px;
+      max-width: 900px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    h2 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .action-btn {
+      background: var(--vscode-button-secondaryBackground, #3a3d41);
+      color: var(--vscode-button-secondaryForeground, #ffffff);
+      border: 1px solid var(--vscode-button-border, transparent);
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .action-btn:hover {
+      background: var(--vscode-button-secondaryHoverBackground, #45494e);
+    }
+    .action-btn.danger-btn {
+      color: var(--vscode-errorForeground, #f48771);
+      border-color: rgba(244, 135, 113, 0.4);
+    }
+    .action-btn.danger-btn:hover {
+      background: var(--vscode-statusBarItem-errorBackground, #c72e2e);
+      color: #ffffff;
+      border-color: transparent;
+    }
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      border: 1px solid var(--vscode-widget-border, #444);
+      background: var(--vscode-editor-background);
+      padding: 16px;
+      border-radius: 6px;
+    }
+    .card-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--vscode-descriptionForeground);
+      margin-bottom: 6px;
+    }
+    .card-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 4px;
+    }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      border-bottom: 1px solid var(--vscode-widget-border, #444);
+      margin-bottom: 12px;
+      padding-bottom: 4px;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--vscode-foreground);
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0.7;
+      transition: all 0.15s ease;
+    }
+    .tab-btn:hover {
+      opacity: 1;
+    }
+    .tab-btn.active {
+      opacity: 1;
+      border-bottom-color: var(--vscode-button-background);
+      font-weight: bold;
+    }
+    .data-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .action-group-label {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      margin-right: 2px;
+    }
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border, #333);
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    .search-input-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+    .search-icon {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-right: 6px;
+      user-select: none;
+    }
+    .search-input {
+      flex: 1;
+      background: transparent;
+      color: var(--vscode-input-foreground);
+      border: none;
+      font-family: var(--vscode-font-family);
+      font-size: 13px;
+      outline: none;
+      width: 100%;
+    }
+    .search-input::placeholder {
+      color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground));
+    }
+    .clear-icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .clear-icon-btn:hover {
+      color: var(--vscode-foreground);
+      background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2));
+    }
+    .search-submit-btn {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .search-submit-btn:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    .search-count-badge {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      padding: 2px 8px;
+      background: var(--vscode-badge-background, rgba(128,128,128,0.15));
+      border-radius: 10px;
+      white-space: nowrap;
+      display: none;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    th {
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--vscode-widget-border, #444);
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--vscode-widget-border, #444);
+    }
+    .key-col {
+      font-family: var(--vscode-editor-font-family, monospace);
+    }
+    code {
+      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.15));
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .num-col {
+      text-align: right;
+    }
+    .sub {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      font-weight: normal;
+    }
+    .empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--vscode-descriptionForeground);
+    }
+    .footer-info {
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+    }
+  </style>
+</head>
+<body>
+  <div class="header-bar">
+    <h2>📊 ショートカット利用統計</h2>
+    <div class="header-actions">
+      <button class="action-btn" onclick="refreshStats()">🔄 統計を更新</button>
+      <button class="action-btn danger-btn" onclick="resetStats()">🗑️ 統計を削除</button>
+    </div>
+  </div>
+
+  <div class="summary-cards">
+    <div class="card">
+      <div class="card-title">① 現行の統計 (全入力)</div>
+      <div class="card-value">{{TOTAL_INPUTS}} <span style="font-size: 14px;">回</span></div>
+      <div class="card-desc">連続打鍵も含めた総実行回数</div>
+    </div>
+    <div class="card">
+      <div class="card-title">② 連続除外統計 (非連続)</div>
+      <div class="card-value">{{TOTAL_NON_CONSECUTIVE}} <span style="font-size: 14px;">回</span></div>
+      <div class="card-desc">同一キーの連続入力を1回として集計</div>
+    </div>
+    <div class="card">
+      <div class="card-title">連続リピート回数</div>
+      <div class="card-value">{{CONSECUTIVE_INPUTS}} <span style="font-size: 14px;">回</span></div>
+      <div class="card-desc">{{REPEAT_RATE}}% が同一キーの連続入力</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="tabs">
+      <button id="btn-tab-compare" class="tab-btn active" onclick="showTab('tab-compare', this)">比較ビュー</button>
+      <button id="btn-tab-raw" class="tab-btn" onclick="showTab('tab-raw', this)">現行の統計 (全入力)</button>
+      <button id="btn-tab-dedup" class="tab-btn" onclick="showTab('tab-dedup', this)">連続除外統計 (非連続)</button>
+    </div>
+    <div class="data-actions">
+      <span class="action-group-label">データ:</span>
+      <button class="action-btn" onclick="copyTsv()">📊 TSVコピー (AI用)</button>
+      <button class="action-btn" onclick="copyJson()">📋 JSONコピー</button>
+      <button class="action-btn" onclick="importJson()">📥 インポート</button>
+    </div>
+  </div>
+
+  <div class="search-bar">
+    <div class="search-input-wrapper">
+      <span class="search-icon">🔍</span>
+      <input
+        type="text"
+        id="search-input"
+        class="search-input"
+        placeholder="キー名でフィルタリング (例: ctrl, shift, enter)..."
+        oninput="onSearchInput()"
+        onkeydown="handleSearchKeyDown(event)"
+      />
+      <button id="search-clear-btn" class="clear-icon-btn" onclick="clearFilter()" style="display: none;" title="クリア">✕</button>
+    </div>
+    <button class="action-btn search-submit-btn" onclick="applyFilter()">検索</button>
+    <span id="search-count" class="search-count-badge"></span>
+  </div>
+
+  <div id="tab-compare" class="tab-content active">
+    <table>
+      <thead>
+        <tr>
+          <th>キーバインド</th>
+          <th style="text-align: right;">現行統計 (全入力)</th>
+          <th style="text-align: right;">連続除外統計 (非連続)</th>
+          <th style="text-align: right;">連続リピート率</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{COMPARISON_ROWS}}
+      </tbody>
+    </table>
+  </div>
+
+  <div id="tab-raw" class="tab-content">
+    <table>
+      <thead>
+        <tr>
+          <th>キーバインド</th>
+          <th style="text-align: right;">使用回数</th>
+          <th style="text-align: right;">割合</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{RAW_ROWS}}
+      </tbody>
+    </table>
+  </div>
+
+  <div id="tab-dedup" class="tab-content">
+    <table>
+      <thead>
+        <tr>
+          <th>キーバインド</th>
+          <th style="text-align: right;">使用回数 (非連続)</th>
+          <th style="text-align: right;">割合</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{NON_CONSECUTIVE_ROWS}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer-info">
+    直前の入力キー: <code>{{LAST_KEY}}</code>
+  </div>
+
+  <script>
+    const vscode = acquireVsCodeApi();
+    const state = vscode.getState() || {};
+    let currentActiveTab = state.activeTab || 'tab-compare';
+    let currentSearchQuery = state.searchQuery || '';
+
+    function refreshStats() {
+      vscode.postMessage({ command: 'refresh' });
+    }
+
+    function copyTsv() {
+      vscode.postMessage({ command: 'copyTsv', tabType: currentActiveTab });
+    }
+
+    function copyJson() {
+      vscode.postMessage({ command: 'copyJson' });
+    }
+
+    function importJson() {
+      vscode.postMessage({ command: 'importJson' });
+    }
+
+    function resetStats() {
+      vscode.postMessage({ command: 'reset' });
+    }
+
+    function showTab(tabId, btn) {
+      currentActiveTab = tabId;
+      saveState();
+      document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
+      document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+      var target = document.getElementById(tabId);
+      if (target) {
+        target.classList.add('active');
+      }
+      if (btn) {
+        btn.classList.add('active');
+      } else {
+        var defaultBtn = document.getElementById('btn-' + tabId);
+        if (defaultBtn) {
+          defaultBtn.classList.add('active');
+        }
+      }
+      updateFilterForActiveTab();
+    }
+
+    function saveState() {
+      vscode.setState({
+        activeTab: currentActiveTab,
+        searchQuery: currentSearchQuery
+      });
+    }
+
+    function onSearchInput() {
+      const input = document.getElementById('search-input');
+      const clearBtn = document.getElementById('search-clear-btn');
+      if (input.value.length > 0) {
+        clearBtn.style.display = 'flex';
+      } else {
+        clearBtn.style.display = 'none';
+        applyFilter();
+      }
+    }
+
+    function handleSearchKeyDown(event) {
+      if (event.key === 'Enter') {
+        applyFilter();
+      }
+    }
+
+    function applyFilter() {
+      const input = document.getElementById('search-input');
+      currentSearchQuery = input.value.trim().toLowerCase();
+      saveState();
+      updateFilterForActiveTab();
+    }
+
+    function clearFilter() {
+      const input = document.getElementById('search-input');
+      input.value = '';
+      document.getElementById('search-clear-btn').style.display = 'none';
+      currentSearchQuery = '';
+      saveState();
+      updateFilterForActiveTab();
+    }
+
+    function updateFilterForActiveTab() {
+      const query = currentSearchQuery;
+      const countBadge = document.getElementById('search-count');
+      const activeContent = document.getElementById(currentActiveTab);
+      if (!activeContent) return;
+
+      const table = activeContent.querySelector('table');
+      if (!table) return;
+
+      const rows = table.querySelectorAll('tbody tr:not(.no-filter-result)');
+      let totalRows = 0;
+      let matchedRows = 0;
+
+      rows.forEach(function(row) {
+        const keyCell = row.querySelector('.key-col');
+        if (!keyCell) return; // 'まだ記録がありません' などの行
+        totalRows++;
+        const keyText = keyCell.textContent.toLowerCase();
+        if (!query || keyText.includes(query)) {
+          row.style.display = '';
+          matchedRows++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      // 検索中バッジの表示
+      if (query && totalRows > 0) {
+        countBadge.style.display = 'inline-block';
+        countBadge.textContent = `${matchedRows} / ${totalRows} 件一致`;
+      } else {
+        countBadge.style.display = 'none';
+      }
+
+      // 一致なし行の表示制御
+      let noResultRow = table.querySelector('.no-filter-result');
+      if (query && totalRows > 0 && matchedRows === 0) {
+        if (!noResultRow) {
+          const colSpan = table.querySelectorAll('thead th').length;
+          noResultRow = document.createElement('tr');
+          noResultRow.className = 'no-filter-result';
+          noResultRow.innerHTML = `<td colspan="${colSpan}" class="empty">「${escapeHtml(query)}」に一致するキーバインドはありません</td>`;
+          table.querySelector('tbody').appendChild(noResultRow);
+        } else {
+          noResultRow.style.display = '';
+          noResultRow.querySelector('td').textContent = `「${query}」に一致するキーバインドはありません`;
+        }
+      } else if (noResultRow) {
+        noResultRow.style.display = 'none';
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    // 初期化時の復元
+    if (currentActiveTab && currentActiveTab !== 'tab-compare') {
+      showTab(currentActiveTab);
+    }
+    if (currentSearchQuery) {
+      const searchInput = document.getElementById('search-input');
+      searchInput.value = currentSearchQuery;
+      document.getElementById('search-clear-btn').style.display = 'flex';
+      applyFilter();
+    }
+  </script>
+</body>
+</html>

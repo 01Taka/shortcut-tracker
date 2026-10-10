@@ -1,0 +1,50 @@
+{
+  "name": "shortcut-tracker",
+  "displayName": "Shortcut Tracker",
+  "description": "Custom shortcut tracking extension",
+  "version": "0.0.4",
+  "engines": {
+    "vscode": "^1.137.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "myTracker.showStats",
+        "title": "ShortcutStatus Show Statistics"
+      },
+      {
+        "command": "myTracker.copyStatsJson",
+        "title": "ShortcutStatus Copy Statistics as JSON"
+      },
+      {
+        "command": "myTracker.copyStatsTsv",
+        "title": "ShortcutStatus Copy Statistics as TSV (キー 回数 パーセント)"
+      },
+      {
+        "command": "myTracker.importStatsJson",
+        "title": "ShortcutStatus Import Statistics from JSON"
+      },
+      {
+        "command": "myTracker.resetStats",
+        "title": "ShortcutStatus Reset Statistics"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/vscode": "^1.137.0",
+    "typescript": "^5.9.3"
+  }
+}
