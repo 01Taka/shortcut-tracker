@@ -16,7 +16,7 @@ const PRIORITY_LEVELS = {
 
 // デフォルトの出力優先度（CLI引数で指定されない場合に使用）
 // "new" | "primary" | "secondary" | "tertiary"
-const DEFAULT_PRIORITY = "primary";
+const DEFAULT_PRIORITY = "tertiary";
 
 // 入力パス
 const inputPath = path.join(

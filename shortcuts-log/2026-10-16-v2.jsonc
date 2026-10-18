@@ -259,28 +259,6 @@
 
   // 1-2. リスト・ポップアップ移動
   {
-    "key": "k",
-    "command": "myTracker.trackAndRun",
-    "args": {
-      "keyName": "list.focusUp (k)",
-      "command": "list.focusUp",
-      "priority": "tertiary",
-      "group": "navigation/list-popup",
-    },
-    "when": "listFocus && !inputFocus && !treestickyScrollFocused",
-  },
-  {
-    "key": "j",
-    "command": "myTracker.trackAndRun",
-    "args": {
-      "keyName": "list.focusDown (j)",
-      "command": "list.focusDown",
-      "priority": "tertiary",
-      "group": "navigation/list-popup",
-    },
-    "when": "listFocus && !inputFocus && !treestickyScrollFocused",
-  },
-  {
     "key": "alt+k",
     "command": "myTracker.trackAndRun",
     "args": {
@@ -1064,7 +1042,7 @@
     "when": "editorTextFocus && !editorReadonly",
   },
 
-  // 3-2. 行削除・結合 (V系)
+  // 3-2. 行削除 (V系)
   {
     "key": "alt+v",
     "command": "myTracker.trackAndRun",
@@ -1072,7 +1050,7 @@
       "keyName": "editor.action.deleteLines (alt+v)",
       "command": "editor.action.deleteLines",
       "priority": "primary",
-      "group": "text-editing/delete-line-join",
+      "group": "text-editing/delete-line",
     },
     "when": "textInputFocus && !editorReadonly && !selectionAnchorSet",
   },
@@ -1086,7 +1064,7 @@
         "commands": ["cursorHome", "deleteAllRight"],
       },
       "priority": "secondary",
-      "group": "text-editing/delete-line-join",
+      "group": "text-editing/delete-line",
     },
     "when": "textInputFocus && !editorReadonly && !editorHasSelection && !selectionAnchorSet",
   },
@@ -1103,20 +1081,9 @@
         ],
       },
       "priority": "secondary",
-      "group": "text-editing/delete-line-join",
+      "group": "text-editing/delete-line",
     },
     "when": "textInputFocus && !editorReadonly && editorHasSelection && !selectionAnchorSet",
-  },
-  {
-    "key": "alt+f alt+v",
-    "command": "myTracker.trackAndRun",
-    "args": {
-      "keyName": "editor.action.joinLines (alt+f alt+v)",
-      "command": "editor.action.joinLines",
-      "priority": "tertiary",
-      "group": "text-editing/delete-line-join",
-    },
-    "when": "editorTextFocus && !editorReadonly",
   },
 
   // 3-3. クリップボード操作 (Y / P / D系)
@@ -1140,6 +1107,7 @@
       "commandArgs": {
         "commands": [
           "expandLineSelection",
+          "cursorLeftSelect",
           "editor.action.clipboardCopyAction",
         ],
       },
@@ -1188,35 +1156,19 @@
     "key": "ctrl+alt+p",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "pasteNewLineBelow (ctrl+alt+p)",
-      "command": "runCommands",
-      "commandArgs": {
-        "commands": [
-          "editor.action.insertLineAfter",
-          "editor.action.clipboardPasteAction",
-        ],
-      },
-      "priority": "secondary",
-      "group": "text-editing/clipboard",
-    },
-    "when": "!selectionAnchorSet && !editorHasSelection",
-  },
-  {
-    "key": "ctrl+alt+p",
-    "command": "myTracker.trackAndRun",
-    "args": {
       "keyName": "pasteEntireLine (ctrl+alt+p)",
       "command": "runCommands",
       "commandArgs": {
         "commands": [
           "expandLineSelection",
+          "cursorLeftSelect",
           "editor.action.clipboardPasteAction",
         ],
       },
       "priority": "secondary",
       "group": "text-editing/clipboard",
     },
-    "when": "!selectionAnchorSet && editorHasSelection",
+    "when": "editorTextFocus && !editorReadonly && !selectionAnchorSet",
   },
   {
     "key": "shift+alt+y",
@@ -1421,6 +1373,31 @@
     "args": {
       "keyName": "editor.action.copyLinesDownAction (ctrl+alt+])",
       "command": "editor.action.copyLinesDownAction",
+      "priority": "secondary",
+      "group": "text-editing/line-structure",
+    },
+    "when": "editorTextFocus && !editorReadonly",
+  },
+  {
+    "key": "ctrl+shift+alt+[",
+    "command": "myTracker.trackAndRun",
+    "args": {
+      "keyName": "joinLinesUpward (ctrl+shift+alt+[)",
+      "command": "runCommands",
+      "commandArgs": {
+        "commands": ["cursorUp", "editor.action.joinLines"],
+      },
+      "priority": "secondary",
+      "group": "text-editing/line-structure",
+    },
+    "when": "editorTextFocus && !editorReadonly",
+  },
+  {
+    "key": "ctrl+shift+alt+]",
+    "command": "myTracker.trackAndRun",
+    "args": {
+      "keyName": "editor.action.joinLines (ctrl+shift+alt+])",
+      "command": "editor.action.joinLines",
       "priority": "secondary",
       "group": "text-editing/line-structure",
     },
@@ -1982,17 +1959,6 @@
   },
 
   // 5-2. リスト・エクスプローラー決定
-  {
-    "key": "m",
-    "command": "myTracker.trackAndRun",
-    "args": {
-      "keyName": "list.select (m)",
-      "command": "list.select",
-      "priority": "tertiary",
-      "group": "universal-confirm/list-commit",
-    },
-    "when": "listFocus && !inputFocus && !treestickyScrollFocused",
-  },
   {
     "key": "alt+m",
     "command": "myTracker.trackAndRun",
@@ -2825,6 +2791,7 @@
   //#endregion
 
   //#region Module 9: 【開発支援・コード実行】
+  // += -> +; / +; -> +: と同義
   // 9-1. インテリセンス & コードアクション・シンボル
   {
     "key": "alt+=",

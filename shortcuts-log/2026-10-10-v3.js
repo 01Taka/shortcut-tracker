@@ -15,8 +15,8 @@
     command: "myTracker.trackAndRun",
     args: {
       keyName: "cursorWordLeft (shift+alt+h)",
-      command: "cursorWordLeft",
     },
+    command: "cursorWordLeft",
     when: "textInputFocus",
   },
   {
