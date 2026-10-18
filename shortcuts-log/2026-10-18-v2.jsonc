@@ -1304,10 +1304,10 @@
 
   // 3-5. 行操作 & コード構造
   {
-    "key": "alt+;",
+    "key": "alt+[Quote]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.action.insertLineBefore (alt+;)",
+      "keyName": "editor.action.insertLineBefore (alt+[Quote])",
       "command": "editor.action.insertLineBefore",
       "priority": "primary",
       "group": "text-editing/line-structure",
@@ -1315,10 +1315,10 @@
     "when": "editorTextFocus && !editorReadonly",
   },
   {
-    "key": "alt+=",
+    "key": "alt+[Semicolon]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.action.insertLineAfter (alt+=)",
+      "keyName": "editor.action.insertLineAfter (alt+[Semicolon])",
       "command": "editor.action.insertLineAfter",
       "priority": "primary",
       "group": "text-editing/line-structure",
@@ -1326,10 +1326,10 @@
     "when": "editorTextFocus && !editorReadonly",
   },
   {
-    "key": "shift+alt+;",
+    "key": "shift+alt+[Quote]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.action.copyLinesUpAction (shift+alt+;)",
+      "keyName": "editor.action.copyLinesUpAction (shift+alt+[Quote])",
       "command": "editor.action.copyLinesUpAction",
       "priority": "secondary",
       "group": "text-editing/line-structure",
@@ -1337,10 +1337,10 @@
     "when": "editorTextFocus && !editorReadonly",
   },
   {
-    "key": "shift+alt+=",
+    "key": "shift+alt+[Semicolon]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.action.copyLinesDownAction (shift+alt+=)",
+      "keyName": "editor.action.copyLinesDownAction (shift+alt+[Semicolon])",
       "command": "editor.action.copyLinesDownAction",
       "priority": "secondary",
       "group": "text-editing/line-structure",
@@ -1348,10 +1348,10 @@
     "when": "editorTextFocus && !editorReadonly",
   },
   {
-    "key": "ctrl+alt+;",
+    "key": "ctrl+alt+[Quote]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.action.moveLinesUpAction (ctrl+alt+;)",
+      "keyName": "editor.action.moveLinesUpAction (ctrl+alt+[Quote])",
       "command": "editor.action.moveLinesUpAction",
       "priority": "secondary",
       "group": "text-editing/line-structure",
@@ -1359,10 +1359,10 @@
     "when": "editorTextFocus && !editorReadonly",
   },
   {
-    "key": "ctrl+alt+=",
+    "key": "ctrl+alt+[Semicolon]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.action.moveLinesDownAction (ctrl+alt+=)",
+      "keyName": "editor.action.moveLinesDownAction (ctrl+alt+[Semicolon])",
       "command": "editor.action.moveLinesDownAction",
       "priority": "secondary",
       "group": "text-editing/line-structure",
@@ -1370,10 +1370,10 @@
     "when": "editorTextFocus && !editorReadonly",
   },
   {
-    "key": "ctrl+shift+alt+;",
+    "key": "ctrl+shift+alt+[Quote]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "joinLinesUpward (ctrl+shift+alt+;)",
+      "keyName": "joinLinesUpward (ctrl+shift+alt+[Quote])",
       "command": "runCommands",
       "commandArgs": {
         "commands": ["cursorUp", "editor.action.joinLines"],
@@ -1384,10 +1384,10 @@
     "when": "editorTextFocus && !editorReadonly",
   },
   {
-    "key": "ctrl+shift+alt+=",
+    "key": "ctrl+shift+alt+[Semicolon]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.action.joinLines (ctrl+shift+alt+=)",
+      "keyName": "editor.action.joinLines (ctrl+shift+alt+[Semicolon])",
       "command": "editor.action.joinLines",
       "priority": "secondary",
       "group": "text-editing/line-structure",
@@ -1397,10 +1397,10 @@
 
   // 3-6. コード折りたたみ・展開（単体・再帰・全体）
   {
-    "key": "alt+f alt+;",
+    "key": "alt+f alt+[Quote]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.fold (alt+f alt+;)",
+      "keyName": "editor.fold (alt+f alt+[Quote])",
       "command": "editor.fold",
       "priority": "tertiary",
       "group": "text-editing/code-folding",
@@ -1408,10 +1408,10 @@
     "when": "editorTextFocus && foldingEnabled",
   },
   {
-    "key": "alt+f alt+=",
+    "key": "alt+f alt+[Semicolon]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.unfold (alt+f alt+=)",
+      "keyName": "editor.unfold (alt+f alt+[Semicolon])",
       "command": "editor.unfold",
       "priority": "tertiary",
       "group": "text-editing/code-folding",
@@ -1419,10 +1419,10 @@
     "when": "editorTextFocus && foldingEnabled",
   },
   {
-    "key": "shift+alt+f shift+alt+;",
+    "key": "shift+alt+f shift+alt+[Quote]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.foldRecursively (shift+alt+f shift+alt+;)",
+      "keyName": "editor.foldRecursively (shift+alt+f shift+alt+[Quote])",
       "command": "editor.foldRecursively",
       "priority": "tertiary",
       "group": "text-editing/code-folding",
@@ -1430,10 +1430,10 @@
     "when": "editorTextFocus && foldingEnabled",
   },
   {
-    "key": "shift+alt+f shift+alt+=",
+    "key": "shift+alt+f shift+alt+[Semicolon]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.unfoldRecursively (shift+alt+f shift+alt+=)",
+      "keyName": "editor.unfoldRecursively (shift+alt+f shift+alt+[Semicolon])",
       "command": "editor.unfoldRecursively",
       "priority": "tertiary",
       "group": "text-editing/code-folding",
@@ -1441,10 +1441,10 @@
     "when": "editorTextFocus && foldingEnabled",
   },
   {
-    "key": "ctrl+alt+f ctrl+alt+;",
+    "key": "ctrl+alt+f ctrl+alt+[Quote]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.foldAll (ctrl+alt+f ctrl+alt+;)",
+      "keyName": "editor.foldAll (ctrl+alt+f ctrl+alt+[Quote])",
       "command": "editor.foldAll",
       "priority": "tertiary",
       "group": "text-editing/code-folding",
@@ -1452,10 +1452,10 @@
     "when": "editorTextFocus && foldingEnabled",
   },
   {
-    "key": "ctrl+alt+f ctrl+alt+=",
+    "key": "ctrl+alt+f ctrl+alt+[Semicolon]",
     "command": "myTracker.trackAndRun",
     "args": {
-      "keyName": "editor.unfoldAll (ctrl+alt+f ctrl+alt+=)",
+      "keyName": "editor.unfoldAll (ctrl+alt+f ctrl+alt+[Semicolon])",
       "command": "editor.unfoldAll",
       "priority": "tertiary",
       "group": "text-editing/code-folding",
@@ -2837,7 +2837,7 @@
       "priority": "primary",
       "group": "development/intellisense",
     },
-    "when": "editorHasCompletionItemProvider && textInputFocus && !editorReadonly && !suggestWidgetVisible",
+    "when": "editorHasCompletionItemProvider && textInputFocus && !editorReadonly && !suggestWidgetVisible && !renameInputVisible && !codeActionMenuVisible && !findInputFocussed && !replaceInputFocussed",
   },
   {
     "key": "shift+alt+m",

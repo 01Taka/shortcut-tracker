@@ -515,4 +515,3 @@ async function copyTsvAction(
     `${label} をTSV形式（キー 回数 パーセント）でクリップボードにコピーしました。`,
   );
 }
-
