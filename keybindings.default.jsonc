@@ -69,47 +69,6 @@
   // },
 
   // 0-3. ロガー追跡（Tracker専用）
-    {
-    "key": "ctrl+v",
-    "command": "editor.action.clipboardPasteAction"
-  },
-    {
-    "key": "ctrl+c",
-    "command": "editor.action.clipboardCopyAction"
-  },
-    {
-    "key": "ctrl+a",
-    "command": "editor.action.selectAll"
-  },
-    {
-    "key": "ctrl+d",
-    "command": "editor.action.addSelectionToNextFindMatch",
-    "when": "editorFocus"
-  },
-    {
-    "key": "ctrl+s",
-    "command": "workbench.action.files.save"
-  },
-    {
-    "key": "ctrl+x",
-    "command": "editor.action.clipboardCutAction"
-  },
-    {
-    "key": "ctrl+z",
-    "command": "undo"
-  },
-    {
-    "key": "ctrl+y",
-    "command": "redo"
-  },
-    {
-    "key": "ctrl+w",
-    "command": "workbench.action.closeActiveEditor"
-  },
-    {
-    "key": "ctrl+q",
-    "command": "workbench.action.quickOpenView"
-  },
   //#endregion
 
   //#region Module 1: 【HJKL ナビゲーション】
@@ -121,7 +80,12 @@
     {
     "key": "shift+alt+h",
     "command": "cursorWordLeft",
-    "when": "textInputFocus"
+    "when": "textInputFocus && !editorHasSelection"
+  },
+    {
+    "key": "shift+alt+h",
+    "command": "cursorLeft",
+    "when": "textInputFocus && editorHasSelection"
   },
     {
     "key": "alt+l",
@@ -130,7 +94,12 @@
     {
     "key": "shift+alt+l",
     "command": "cursorWordEndRight",
-    "when": "textInputFocus"
+    "when": "textInputFocus && !editorHasSelection"
+  },
+    {
+    "key": "shift+alt+l",
+    "command": "cursorRight",
+    "when": "textInputFocus && editorHasSelection"
   },
     {
     "key": "alt+k",
@@ -149,23 +118,7 @@
   },
     {
     "key": "ctrl+alt+l",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "cursorEnd",
-        "cursorWordLeft"
-      ]
-    },
-    "when": "textInputFocus"
-  },
-    {
-    "key": "ctrl+shift+alt+k",
-    "command": "cursorTop",
-    "when": "textInputFocus"
-  },
-    {
-    "key": "ctrl+shift+alt+j",
-    "command": "cursorBottom",
+    "command": "cursorEnd",
     "when": "textInputFocus"
   },
 
@@ -181,26 +134,6 @@
     "when": "listFocus && !inputFocus && !treestickyScrollFocused"
   },
     {
-    "key": "shift+alt+k",
-    "command": "list.expandSelectionUp",
-    "when": "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused"
-  },
-    {
-    "key": "shift+alt+j",
-    "command": "list.expandSelectionDown",
-    "when": "listFocus && listSupportsMultiselect && !inputFocus && !treestickyScrollFocused"
-  },
-    {
-    "key": "ctrl+alt+k",
-    "command": "list.focusPageUp",
-    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
-  },
-    {
-    "key": "ctrl+alt+j",
-    "command": "list.focusPageDown",
-    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
-  },
-    {
     "key": "alt+k",
     "command": "selectPrevSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
@@ -209,16 +142,6 @@
     "key": "alt+j",
     "command": "selectNextSuggestion",
     "when": "suggestWidgetMultipleSuggestions && suggestWidgetVisible && textInputFocus || suggestWidgetVisible && textInputFocus && !suggestWidgetHasFocusedSuggestion"
-  },
-    {
-    "key": "alt+k",
-    "command": "focusPreviousRenameSuggestion",
-    "when": "renameInputVisible"
-  },
-    {
-    "key": "alt+j",
-    "command": "focusNextRenameSuggestion",
-    "when": "renameInputVisible"
   },
     {
     "key": "alt+k",
@@ -265,32 +188,11 @@
     "when": "textInputFocus && !inReferenceSearchEditor"
   },
     {
-    "key": "shift+alt+k",
-    "command": "editorScroll",
-    "args": {
-      "to": "up",
-      "by": "wrappedLine",
-      "value": 4,
-      "revealCursor": false
-    },
-    "when": "inReferenceSearchEditor && !editorReadonly"
-  },
-    {
-    "key": "shift+alt+j",
-    "command": "editorScroll",
-    "args": {
-      "to": "down",
-      "by": "wrappedLine",
-      "value": 4,
-      "revealCursor": false
-    },
-    "when": "inReferenceSearchEditor && !editorReadonly"
-  },
-    {
     "key": "alt+enter",
     "command": "runCommands",
     "args": {
       "commands": [
+        "workbench.action.focusActiveEditorGroup",
         {
           "command": "cursorMove",
           "args": {
@@ -311,69 +213,17 @@
         }
       ]
     },
-    "when": "editorTextFocus && !findInputFocussed && !inReferenceSearchEditor"
+    "when": "(editorTextFocus || sideBarFocus || auxiliaryBarFocus) && !findInputFocussed && !inReferenceSearchEditor"
   },
     {
-    "key": "alt+enter",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        {
-          "command": "cursorMove",
-          "args": {
-            "to": "viewPortTop",
-            "by": "wrappedLine"
-          }
-        },
-        {
-          "command": "cursorMove",
-          "args": {
-            "to": "down",
-            "value": 5,
-            "by": "wrappedLine"
-          }
-        },
-        {
-          "command": "cursorEnd"
-        }
-      ]
-    },
-    "when": "editorTextFocus && !findInputFocussed && inReferenceSearchEditor"
+    "key": "shift+alt+enter",
+    "command": "cursorTop",
+    "when": "textInputFocus"
   },
     {
     "key": "ctrl+alt+enter",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        {
-          "command": "cursorMove",
-          "args": {
-            "to": "viewPortTop",
-            "by": "wrappedLine"
-          }
-        },
-        {
-          "command": "cursorEnd"
-        }
-      ]
-    },
-    "when": "editorTextFocus && !replaceInputFocussed"
-  },
-    {
-    "key": "ctrl+alt+k",
-    "command": "cursorMove",
-    "args": {
-      "to": "prevBlankLine"
-    },
-    "when": "editorTextFocus"
-  },
-    {
-    "key": "ctrl+alt+j",
-    "command": "cursorMove",
-    "args": {
-      "to": "nextBlankLine"
-    },
-    "when": "editorTextFocus"
+    "command": "cursorBottom",
+    "when": "textInputFocus"
   },
 
   // 1-4. ナビゲーション履歴
@@ -394,18 +244,6 @@
     {
     "key": "alt+a",
     "command": "editor.action.setSelectionAnchor",
-    "when": "editorTextFocus && !selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+a",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "cursorLineStart",
-        "editor.action.setSelectionAnchor",
-        "cursorUndo"
-      ]
-    },
     "when": "editorTextFocus && !selectionAnchorSet"
   },
 
@@ -438,23 +276,12 @@
     "when": "editorTextFocus && selectionAnchorSet"
   },
     {
-    "key": "alt+v",
+    "key": "alt+n",
     "command": "runCommands",
     "args": {
       "commands": [
         "editor.action.selectFromAnchorToCursor",
         "deleteLeft"
-      ]
-    },
-    "when": "editorTextFocus && selectionAnchorSet"
-  },
-    {
-    "key": "alt+p",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.selectFromAnchorToCursor",
-        "editor.action.clipboardPasteAction"
       ]
     },
     "when": "editorTextFocus && selectionAnchorSet"
@@ -466,9 +293,9 @@
     "command": "runCommands",
     "args": {
       "commands": [
-        "cursorDown",
-        "cursorLineStart",
-        "editor.action.selectFromAnchorToCursor"
+        "editor.action.selectFromAnchorToCursor",
+        "expandLineSelection",
+        "cursorLeftSelect"
       ]
     },
     "when": "editorTextFocus && selectionAnchorSet"
@@ -478,9 +305,9 @@
     "command": "runCommands",
     "args": {
       "commands": [
-        "cursorDown",
-        "cursorLineStart",
         "editor.action.selectFromAnchorToCursor",
+        "expandLineSelection",
+        "cursorLeftSelect",
         "editor.action.clipboardCopyAction"
       ]
     },
@@ -491,100 +318,27 @@
     "command": "runCommands",
     "args": {
       "commands": [
-        "cursorDown",
-        "cursorLineStart",
         "editor.action.selectFromAnchorToCursor",
+        "expandLineSelection",
         "editor.action.clipboardCutAction"
       ]
     },
     "when": "editorTextFocus && selectionAnchorSet"
   },
     {
-    "key": "shift+alt+v",
+    "key": "shift+alt+n",
     "command": "runCommands",
     "args": {
       "commands": [
-        "cursorDown",
-        "cursorLineStart",
         "editor.action.selectFromAnchorToCursor",
+        "expandLineSelection",
         "deleteLeft"
-      ]
-    },
-    "when": "editorTextFocus && selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+p",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "cursorDown",
-        "cursorLineStart",
-        "editor.action.selectFromAnchorToCursor",
-        "editor.action.clipboardPasteAction"
       ]
     },
     "when": "editorTextFocus && selectionAnchorSet"
   },
 
   // 2-4. アンカー連動 検索・コメント
-    {
-    "key": "alt+s",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "cursorDown",
-        "cursorLineStart",
-        "editor.action.selectFromAnchorToCursor",
-        {
-          "command": "editor.actions.findWithArgs",
-          "args": {
-            "findInSelection": true
-          }
-        }
-      ]
-    },
-    "when": "editorTextFocus && selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+s",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.selectFromAnchorToCursor",
-        {
-          "command": "editor.actions.findWithArgs",
-          "args": {
-            "findInSelection": true,
-            "replaceString": ""
-          }
-        }
-      ]
-    },
-    "when": "editorTextFocus && selectionAnchorSet"
-  },
-    {
-    "key": "alt+/",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.selectFromAnchorToCursor",
-        "editor.action.commentLine",
-        "cancelSelection"
-      ]
-    },
-    "when": "editorTextFocus && selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+/",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.selectFromAnchorToCursor",
-        "editor.action.blockComment"
-      ]
-    },
-    "when": "editorTextFocus && selectionAnchorSet"
-  },
 
   // 2-5. アンカー解除
     {
@@ -607,56 +361,14 @@
     "when": "textInputFocus && !selectionAnchorSet"
   },
     {
-    "key": "ctrl+alt+b",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.smartSelect.expand",
-        "deleteLeft"
-      ]
-    },
-    "when": "editorTextFocus && !editorReadonly && !editorHasSelection"
-  },
-    {
-    "key": "ctrl+alt+b",
-    "command": "deleteLeft",
-    "when": "editorTextFocus && !editorReadonly && editorHasSelection"
-  },
-    {
     "key": "alt+n",
     "command": "deleteWordLeft",
-    "when": "textInputFocus"
+    "when": "textInputFocus && !selectionAnchorSet"
   },
     {
     "key": "shift+alt+n",
     "command": "deleteWordRight",
-    "when": "textInputFocus"
-  },
-    {
-    "key": "ctrl+alt+n",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.addSelectionToNextFindMatch",
-        "deleteLeft"
-      ]
-    },
-    "when": "editorTextFocus && !editorReadonly && !editorHasSelection"
-  },
-    {
-    "key": "ctrl+alt+n",
-    "command": "deleteLeft",
-    "when": "editorTextFocus && !editorReadonly && editorHasSelection"
-  },
-    {
-    "key": "alt+f alt+n",
-    "command": "deleteAllLeft",
-    "when": "editorTextFocus && !editorReadonly"
-  },
-    {
-    "key": "shift+alt+f shift+alt+n",
-    "command": "deleteAllRight",
-    "when": "editorTextFocus && !editorReadonly"
+    "when": "textInputFocus && !selectionAnchorSet"
   },
 
   // 3-2. 行削除 (V系)
@@ -664,28 +376,6 @@
     "key": "alt+v",
     "command": "editor.action.deleteLines",
     "when": "textInputFocus && !editorReadonly && !selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+v",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "cursorHome",
-        "deleteAllRight"
-      ]
-    },
-    "when": "textInputFocus && !editorReadonly && !editorHasSelection && !selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+v",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.deleteLines",
-        "editor.action.insertLineBefore"
-      ]
-    },
-    "when": "textInputFocus && !editorReadonly && editorHasSelection && !selectionAnchorSet"
   },
 
   // 3-3. クリップボード操作 (Y / P / D系)
@@ -705,75 +395,7 @@
     "when": "!selectionAnchorSet"
   },
   // --- 未選択時：単語単位の操作 ---
-    {
-    "key": "shift+alt+y",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.addSelectionToNextFindMatch",
-        "editor.action.clipboardCopyAction"
-      ]
-    },
-    "when": "editorTextFocus && !editorHasSelection && !selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+d",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.addSelectionToNextFindMatch",
-        "editor.action.clipboardCutAction"
-      ]
-    },
-    "when": "editorTextFocus && !editorHasSelection && !selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+p",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.addSelectionToNextFindMatch",
-        "editor.action.clipboardPasteAction"
-      ]
-    },
-    "when": "editorTextFocus && !editorHasSelection && !selectionAnchorSet"
-  },
   // --- 選択時：行単位の操作 ---
-    {
-    "key": "shift+alt+y",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "expandLineSelection",
-        "cursorLeftSelect",
-        "editor.action.clipboardCopyAction"
-      ]
-    },
-    "when": "editorTextFocus && editorHasSelection && !selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+d",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "expandLineSelection",
-        "editor.action.clipboardCutAction"
-      ]
-    },
-    "when": "editorTextFocus && !editorReadonly && editorHasSelection && !selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+p",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "expandLineSelection",
-        "cursorLeftSelect",
-        "editor.action.clipboardPasteAction"
-      ]
-    },
-    "when": "editorTextFocus && !editorReadonly && editorHasSelection && !selectionAnchorSet"
-  },
   // ペースト(P)の拡張
     {
     "key": "ctrl+alt+p",
@@ -782,17 +404,6 @@
       "commands": [
         "expandLineSelection",
         "cursorLeftSelect",
-        "editor.action.clipboardPasteAction"
-      ]
-    },
-    "when": "editorTextFocus && !editorReadonly && !selectionAnchorSet"
-  },
-    {
-    "key": "alt+f alt+p",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.insertLineAfter",
         "editor.action.clipboardPasteAction"
       ]
     },
@@ -837,11 +448,6 @@
     "when": "editorTextFocus && !editorReadonly"
   },
     {
-    "key": "shift+alt+[Quote]",
-    "command": "editor.action.copyLinesUpAction",
-    "when": "editorTextFocus && !editorReadonly"
-  },
-    {
     "key": "shift+alt+[Semicolon]",
     "command": "editor.action.copyLinesDownAction",
     "when": "editorTextFocus && !editorReadonly"
@@ -856,100 +462,14 @@
     "command": "editor.action.moveLinesDownAction",
     "when": "editorTextFocus && !editorReadonly"
   },
-    {
-    "key": "ctrl+shift+alt+[Quote]",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "cursorUp",
-        "editor.action.joinLines"
-      ]
-    },
-    "when": "editorTextFocus && !editorReadonly"
-  },
-    {
-    "key": "ctrl+shift+alt+[Semicolon]",
-    "command": "editor.action.joinLines",
-    "when": "editorTextFocus && !editorReadonly"
-  },
 
   // 3-6. コード折りたたみ・展開（単体・再帰・全体）
-    {
-    "key": "alt+f alt+[Quote]",
-    "command": "editor.fold",
-    "when": "editorTextFocus && foldingEnabled"
-  },
-    {
-    "key": "alt+f alt+[Semicolon]",
-    "command": "editor.unfold",
-    "when": "editorTextFocus && foldingEnabled"
-  },
-    {
-    "key": "shift+alt+f shift+alt+[Quote]",
-    "command": "editor.foldRecursively",
-    "when": "editorTextFocus && foldingEnabled"
-  },
-    {
-    "key": "shift+alt+f shift+alt+[Semicolon]",
-    "command": "editor.unfoldRecursively",
-    "when": "editorTextFocus && foldingEnabled"
-  },
-    {
-    "key": "ctrl+alt+f ctrl+alt+[Quote]",
-    "command": "editor.foldAll",
-    "when": "editorTextFocus && foldingEnabled"
-  },
-    {
-    "key": "ctrl+alt+f ctrl+alt+[Semicolon]",
-    "command": "editor.unfoldAll",
-    "when": "editorTextFocus && foldingEnabled"
-  },
 
   // 3-7. コメント操作
     {
     "key": "alt+/",
     "command": "editor.action.commentLine",
     "when": "editorTextFocus && !editorReadonly && !selectionAnchorSet"
-  },
-    {
-    "key": "shift+alt+/",
-    "command": "editor.action.blockComment",
-    "when": "editorTextFocus && !editorReadonly && !selectionAnchorSet"
-  },
-    {
-    "key": "alt+f alt+/",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.clipboardCutAction",
-        "cursorEnd",
-        {
-          "command": "editor.action.insertSnippet",
-          "args": {
-            "snippet": " ${1:$CLIPBOARD}$0"
-          }
-        },
-        "editor.action.blockComment",
-        "cursorLeft",
-        "cursorWordLeft",
-        "cursorWordLeft"
-      ]
-    },
-    "when": "editorHasSelection && editorTextFocus && !editorReadonly"
-  },
-    {
-    "key": "alt+f alt+/",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "cursorLineEnd",
-        "editor.action.blockComment",
-        "editor.action.clipboardCutAction",
-        "cursorWordLeft",
-        "cursorWordLeft"
-      ]
-    },
-    "when": "!editorHasSelection && editorTextFocus && !editorReadonly"
   },
 
   // 3-8. スマート範囲選択 & 一致選択 (O / I系)
@@ -963,54 +483,15 @@
     "command": "editor.action.smartSelect.shrink",
     "when": "editorTextFocus"
   },
-    {
-    "key": "alt+f alt+o",
-    "command": "editor.action.selectToBracket",
-    "args": {
-      "selectBrackets": false
-    },
-    "when": "editorTextFocus && !editorHasSelection"
-  },
-    {
-    "key": "alt+f alt+o",
-    "command": "editor.action.selectToBracket",
-    "args": {
-      "selectBrackets": true
-    },
-    "when": "editorTextFocus && editorHasSelection"
-  },
   // JS / C / Java / JSON など区切りに{}を使う言語で活躍
-    {
-    "key": "shift+alt+f shift+alt+o",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        {
-          "command": "editor.action.selectToBracket",
-          "args": {
-            "selectBrackets": false
-          }
-        },
-        "editor.action.smartSelect.expand",
-        "editor.action.smartSelect.expand",
-        "expandLineSelection"
-      ]
-    },
-    "when": "editorTextFocus"
-  },
     {
     "key": "alt+i",
     "command": "editor.action.addSelectionToNextFindMatch",
-    "when": "editorFocus"
+    "when": "editorFocus && !selectionAnchorSet"
   },
     {
     "key": "shift+alt+i",
     "command": "cursorUndo",
-    "when": "editorFocus"
-  },
-    {
-    "key": "ctrl+alt+i",
-    "command": "expandLineSelection",
     "when": "editorFocus"
   },
     {
@@ -1032,18 +513,6 @@
     "when": "!selectionAnchorSet && editorTextFocus"
   },
     {
-    "key": "shift+alt+f shift+alt+a",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.insertCursorAtEndOfEachLineSelected",
-        "cursorLineStart",
-        "cursorHome"
-      ]
-    },
-    "when": "!selectionAnchorSet && editorTextFocus"
-  },
-    {
     "key": "alt+f alt+a",
     "command": "runCommands",
     "args": {
@@ -1055,37 +524,8 @@
     },
     "when": "selectionAnchorSet && editorTextFocus"
   },
-    {
-    "key": "shift+alt+f shift+alt+a",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "editor.action.selectFromAnchorToCursor",
-        "editor.action.insertCursorAtEndOfEachLineSelected",
-        "cursorLineStart",
-        "cursorHome"
-      ]
-    },
-    "when": "selectionAnchorSet && editorTextFocus"
-  },
 
   // 3-10. 編集補助・履歴・保存
-    {
-    "key": "shift+space",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        {
-          "command": "type",
-          "args": {
-            "text": " "
-          }
-        },
-        "cursorLeft"
-      ]
-    },
-    "when": "editorTextFocus && !editorReadonly && !isComposing"
-  },
     {
     "key": "alt+u",
     "command": "undo"
@@ -1093,10 +533,6 @@
     {
     "key": "shift+alt+u",
     "command": "redo"
-  },
-    {
-    "key": "shift+alt+enter",
-    "command": "saveAll"
   },
   //#endregion
 
@@ -1137,77 +573,12 @@
     "when": "editorHasDefinitionProvider && editorTextFocus && !referenceSearchVisible && !inReferenceSearchEditor && !isInEmbeddedEditor && !suggestWidgetVisible"
   },
     {
-    "key": "shift+alt+g",
-    "command": "togglePeekWidgetFocus",
-    "when": "referenceSearchVisible"
-  },
-    {
-    "key": "shift+alt+g",
-    "command": "editor.action.goToImplementation",
-    "when": "editorHasImplementationProvider && editorTextFocus && !referenceSearchVisible && !inReferenceSearchEditor && !isInEmbeddedEditor"
-  },
-    {
     "key": "ctrl+alt+g",
     "command": "editor.action.goToReferences",
     "when": "editorHasReferenceProvider && editorTextFocus && !referenceSearchVisible && !inReferenceSearchEditor && !isInEmbeddedEditor"
   },
-    {
-    "key": "ctrl+shift+alt+g",
-    "command": "editor.action.revealDefinitionAside",
-    "when": "editorHasDefinitionProvider && editorTextFocus && !isInEmbeddedEditor"
-  },
 
   // 4-4. 検索オプション・トグル復元 (Alt+F W / R / C / L)
-    {
-    "key": "alt+f alt+w",
-    "command": "toggleSearchEditorWholeWord",
-    "when": "inSearchEditor && searchInputBoxFocus"
-  },
-    {
-    "key": "alt+f alt+w",
-    "command": "toggleFindWholeWord",
-    "when": "editorFocus"
-  },
-    {
-    "key": "alt+f alt+w",
-    "command": "toggleSearchWholeWord",
-    "when": "searchViewletFocus"
-  },
-    {
-    "key": "alt+f alt+r",
-    "command": "toggleFindRegex",
-    "when": "editorFocus"
-  },
-    {
-    "key": "alt+f alt+r",
-    "command": "toggleSearchRegex",
-    "when": "searchViewletFocus"
-  },
-    {
-    "key": "alt+f alt+r",
-    "command": "workbench.action.chat.toggleFindRegex",
-    "when": "chatFindWidgetVisible"
-  },
-    {
-    "key": "alt+f alt+c",
-    "command": "toggleFindCaseSensitive",
-    "when": "editorFocus"
-  },
-    {
-    "key": "alt+f alt+c",
-    "command": "toggleSearchCaseSensitive",
-    "when": "searchViewletFocus"
-  },
-    {
-    "key": "alt+f alt+c",
-    "command": "workbench.action.chat.toggleFindCaseSensitive",
-    "when": "chatFindWidgetVisible"
-  },
-    {
-    "key": "alt+f alt+l",
-    "command": "toggleFindInSelection",
-    "when": "editorFocus && findInputFocussed"
-  },
   //#endregion
 
   //#region Module 5: 【ユニバーサル決定 (Alt+M)】
@@ -1232,11 +603,6 @@
     "command": "workbench.action.acceptSelectedQuickOpenItem",
     "when": "inQuickOpen"
   },
-    {
-    "key": "alt+m",
-    "command": "editor.action.replaceAll",
-    "when": "editorFocus && replaceInputFocussed"
-  },
 
   // 5-2. リスト・エクスプローラー決定
     {
@@ -1246,70 +612,18 @@
   },
     {
     "key": "alt+m",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "openReference",
-        "closeReferenceSearch"
-      ]
-    },
-    "when": "listFocus && referenceSearchVisible && !inputFocus"
-  },
-    {
-    "key": "alt+m",
     "command": "list.toggleExpand",
     "when": "(treeElementCanExpand || treeElementCanCollapse) && listFocus && !inputFocus && !treestickyScrollFocused"
-  },
-    {
-    "key": "shift+alt+m",
-    "command": "list.toggleSelection",
-    "when": "listFocus && !inputFocus && !treestickyScrollFocused"
-  },
-    {
-    "key": "alt+m",
-    "command": "filesExplorer.openFilePreserveFocus",
-    "when": "filesExplorerFocus && !explorerResourceIsFolder && !inputFocus"
-  },
-    {
-    "key": "ctrl+alt+m",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "list.select",
-        "workbench.action.closeSidebar"
-      ]
-    },
-    "when": "filesExplorerFocus && !inputFocus"
   },
   //#endregion
 
   //#region Module 6: 【ユニバーサル脱出 (Alt+E)】
-    {
-    "key": "alt+e",
-    "command": "noop",
-    "when": "textInputFocus && !selectionAnchorSet"
-  },
 
   // 6-1. UI・ウィジェットを閉じる
     {
     "key": "alt+e",
-    "command": "closeEditorHover",
-    "when": "editorHoverVisible"
-  },
-    {
-    "key": "alt+e",
     "command": "closeFindWidget",
     "when": "editorFocus && findWidgetVisible && !isComposing"
-  },
-    {
-    "key": "alt+e",
-    "command": "closeMarkersNavigation",
-    "when": "editorFocus && markersNavigationVisible"
-  },
-    {
-    "key": "alt+e",
-    "command": "closeParameterHints",
-    "when": "editorFocus && parameterHintsVisible"
   },
     {
     "key": "alt+e",
@@ -1328,22 +642,12 @@
     "command": "cancelSelection",
     "when": "editorHasSelection && textInputFocus && !selectionAnchorSet"
   },
-    {
-    "key": "alt+e",
-    "command": "workbench.files.action.focusFilesExplorer",
-    "when": "explorerViewletVisible && filesExplorerFocus && inputFocus"
-  },
 
   // 6-3. モード離脱・サジェスト非表示
     {
     "key": "alt+e",
     "command": "editor.action.inlineSuggest.hide",
     "when": "inlineSuggestVisible && textInputFocus"
-  },
-    {
-    "key": "alt+e",
-    "command": "hideCodeActionWidget",
-    "when": "codeActionMenuVisible"
   },
     {
     "key": "alt+e",
@@ -1367,8 +671,8 @@
   },
     {
     "key": "alt+e",
-    "command": "list.clear",
-    "when": "listFocus && listMultiSelection && !inputFocus && !treestickyScrollFocused"
+    "command": "workbench.action.focusActiveEditorGroup",
+    "when": "(sideBarFocus || auxiliaryBarFocus) && !listMultiSelection && !renameInputVisible"
   },
   //#endregion
 
@@ -1383,10 +687,6 @@
     "command": "workbench.action.reopenClosedEditor"
   },
     {
-    "key": "ctrl+alt+w",
-    "command": "workbench.action.closeEditorsInGroup"
-  },
-    {
     "key": "alt+t",
     "command": "workbench.action.nextEditorInGroup"
   },
@@ -1394,39 +694,8 @@
     "key": "shift+alt+t",
     "command": "workbench.action.previousEditorInGroup"
   },
-    {
-    "key": "ctrl+alt+t",
-    "command": "workbench.action.lastEditorInGroup"
-  },
 
   // 7-2. 画面分割 & グループフォーカス
-    {
-    "key": "shift+alt+f shift+alt+l",
-    "command": "workbench.action.splitEditor"
-  },
-    {
-    "key": "shift+alt+f shift+alt+h",
-    "command": "workbench.action.closeGroup"
-  },
-    {
-    "key": "alt+f alt+h",
-    "command": "workbench.action.focusLeftGroup"
-  },
-    {
-    "key": "alt+f alt+j",
-    "command": "workbench.action.focusBelowGroup",
-    "when": "!inSnippetMode"
-  },
-    {
-    "key": "alt+f alt+k",
-    "command": "workbench.action.focusAboveGroup",
-    "when": "!inSnippetMode"
-  },
-    {
-    "key": "alt+f alt+l",
-    "command": "workbench.action.focusRightGroup",
-    "when": "!inSnippetMode && !findInputFocussed"
-  },
 
   // 7-3. コマンド・クイックオープン
     {
@@ -1434,43 +703,27 @@
     "command": "workbench.action.quickOpen"
   },
     {
-    "key": "alt+q",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "workbench.action.quickOpenSelectNext",
-        "workbench.action.acceptSelectedQuickOpenItem"
-      ]
-    },
-    "when": "inQuickOpen"
-  },
-    {
     "key": "shift+alt+q",
-    "command": "workbench.action.gotoSymbol",
-    "when": "!accessibilityHelpIsShown && !accessibleViewIsShown"
-  },
-    {
-    "key": "ctrl+alt+q",
-    "command": "workbench.action.showAllSymbols"
+    "command": "workbench.action.gotoSymbol"
   },
     {
     "key": "alt+f alt+q",
     "command": "workbench.action.showCommands"
   },
 
-  // 7-4. サイドバー・パネル管理
+  //  7-4. サイドバー・パネル管理
     {
-    "key": "alt+f alt+t",
+    "key": "alt+f alt+j",
     "command": "workbench.action.focusActiveEditorGroup",
     "when": "panelFocus"
   },
     {
-    "key": "alt+f alt+t",
+    "key": "alt+f alt+j",
     "command": "workbench.action.focusPanel",
     "when": "!panelFocus"
   },
     {
-    "key": "shift+alt+f shift+alt+t",
+    "key": "shift+alt+f shift+alt+j",
     "command": "workbench.action.togglePanel"
   },
     {
@@ -1486,40 +739,27 @@
     {
     "key": "alt+f alt+g",
     "command": "workbench.action.toggleSidebarVisibility",
-    "when": "activeViewlet == 'workbench.view.scm' && sideBarVisible"
+    "when": "sideBarFocus && activeViewlet == 'workbench.view.scm' && inputFocus"
+  },
+    {
+    "key": "alt+f alt+g",
+    "command": "workbench.scm.action.focusNextInput",
+    "when": "sideBarFocus && activeViewlet == 'workbench.view.scm' && !inputFocus"
   },
     {
     "key": "alt+f alt+g",
     "command": "workbench.view.scm",
-    "when": "activeViewlet != 'workbench.view.scm' || !sideBarVisible"
+    "when": "!sideBarFocus || activeViewlet != 'workbench.view.scm'"
   },
     {
     "key": "alt+f alt+s",
     "command": "workbench.action.toggleSidebarVisibility",
-    "when": "activeViewlet == 'workbench.view.search' && sideBarVisible"
+    "when": "sideBarFocus && activeViewlet == 'workbench.view.search' && inputFocus"
   },
     {
     "key": "alt+f alt+s",
     "command": "workbench.action.findInFiles",
-    "when": "activeViewlet != 'workbench.view.search' || !sideBarVisible"
-  },
-    {
-    "key": "shift+alt+f shift+alt+s",
-    "command": "workbench.action.toggleSidebarVisibility",
-    "when": "activeViewlet == 'workbench.view.search' && sideBarVisible"
-  },
-    {
-    "key": "shift+alt+f shift+alt+s",
-    "command": "workbench.action.replaceInFiles",
-    "when": "activeViewlet != 'workbench.view.search' || !sideBarVisible"
-  },
-    {
-    "key": "alt+f alt+b",
-    "command": "workbench.action.toggleSidebarVisibility"
-  },
-    {
-    "key": "shift+alt+f shift+alt+b",
-    "command": "workbench.action.toggleAuxiliaryBar"
+    "when": "!sideBarFocus || activeViewlet != 'workbench.view.search' || !inputFocus"
   },
   //#endregion
 
@@ -1536,31 +776,6 @@
     "when": "filesExplorerFocus && foldersViewVisible && !inputFocus"
   },
     {
-    "key": "ctrl+alt+n",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "renameFile",
-        "editor.action.clipboardCopyAction",
-        "explorer.newFile",
-        "editor.action.clipboardPasteAction"
-      ]
-    },
-    "when": "filesExplorerFocus && foldersViewVisible && !inputFocus"
-  },
-    {
-    "key": "alt+f alt+n",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "filesExplorer.copy",
-        "filesExplorer.paste",
-        "renameFile"
-      ]
-    },
-    "when": "filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus"
-  },
-    {
     "key": "alt+r",
     "command": "renameFile",
     "when": "filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus"
@@ -1570,86 +785,8 @@
     "command": "editor.action.selectAll",
     "when": "filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !explorerResourceReadonly && inputFocus"
   },
-    {
-    "key": "alt+f alt+y",
-    "command": "filesExplorer.copy",
-    "when": "filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !inputFocus"
-  },
-    {
-    "key": "alt+f alt+p",
-    "command": "filesExplorer.paste",
-    "when": "filesExplorerFocus && foldersViewVisible && !explorerResourceReadonly && !inputFocus"
-  },
-    {
-    "key": "alt+f alt+d",
-    "command": "filesExplorer.cut",
-    "when": "!explorerResourceCut && filesExplorerFocus && foldersViewVisible && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus"
-  },
-    {
-    "key": "alt+f alt+d",
-    "command": "filesExplorer.cancelCut",
-    "when": "explorerResourceCut && filesExplorerFocus && foldersViewVisible && !inputFocus"
-  },
-    {
-    "key": "alt+f alt+v",
-    "command": "moveFileToTrash",
-    "when": "explorerResourceMoveableToTrash && filesExplorerFocus && foldersViewVisible && !inputFocus"
-  },
 
   // 8-2. パス取得 & OS連携
-    {
-    "key": "alt+y",
-    "command": "runCommands",
-    "args": {
-      "commands": [
-        "renameFile",
-        "editor.action.selectAll",
-        "editor.action.clipboardCopyAction",
-        "workbench.files.action.focusFilesExplorer"
-      ]
-    },
-    "when": "filesExplorerFocus && !inputFocus"
-  },
-    {
-    "key": "shift+alt+y",
-    "command": "copyRelativeFilePath",
-    "when": "filesExplorerFocus && !inputFocus"
-  },
-    {
-    "key": "ctrl+alt+y",
-    "command": "copyFilePath",
-    "when": "filesExplorerFocus && !inputFocus"
-  },
-    {
-    "key": "alt+o",
-    "command": "workbench.action.files.openFile",
-    "when": "filesExplorerFocus && !editorFocus"
-  },
-    {
-    "key": "shift+alt+o",
-    "command": "workbench.action.files.openFolder",
-    "when": "openFolderWorkspaceSupport && filesExplorerFocus && !editorFocus"
-  },
-    {
-    "key": "ctrl+alt+o",
-    "command": "revealFileInOS",
-    "when": "openFolderWorkspaceSupport && filesExplorerFocus && !editorFocus"
-  },
-    {
-    "key": "alt+l",
-    "command": "nextCompressedFolder",
-    "when": "filesExplorerFocus && foldersViewVisible && !inputFocus && !treestickyScrollFocused"
-  },
-    {
-    "key": "alt+h",
-    "command": "previousCompressedFolder",
-    "when": "filesExplorerFocus && foldersViewVisible && !inputFocus && !treestickyScrollFocused"
-  },
-    {
-    "key": "alt+e",
-    "command": "workbench.action.focusActiveEditorGroup",
-    "when": "filesExplorerFocus && !inputFocus && !listMultiSelection"
-  },
   //#endregion
 
   //#region Module 9: 【開発支援・コード実行】
@@ -1670,19 +807,9 @@
     "when": "editorTextFocus && !editorHoverVisible"
   },
     {
-    "key": "ctrl+shift+alt+m",
-    "command": "editor.action.triggerParameterHints",
-    "when": "editorHasSignatureHelpProvider && textInputFocus"
-  },
-    {
     "key": "ctrl+alt+o",
     "command": "editor.action.rename",
     "when": "editorHasRenameProvider && editorTextFocus && !editorReadonly"
-  },
-    {
-    "key": "ctrl+shift+alt+o",
-    "command": "editor.action.refactor",
-    "when": "editorHasCodeActionsProvider && textInputFocus && !editorReadonly"
   },
 
   // 9-2. エラー・Git差分ジャンプ
@@ -1707,16 +834,6 @@
     "command": "editor.action.marker.prev",
     "when": "editorFocus"
   },
-    {
-    "key": "ctrl+alt+,",
-    "command": "workbench.action.editor.nextChange",
-    "when": "editorTextFocus && !textCompareEditorActive && quickDiffDecorationCount != '0'"
-  },
-    {
-    "key": "ctrl+shift+alt+,",
-    "command": "workbench.action.editor.previousChange",
-    "when": "editorTextFocus && !textCompareEditorActive && quickDiffDecorationCount != '0'"
-  },
 
   // 9-3. コード整形 & スニペット操作
     {
@@ -1729,26 +846,12 @@
     "command": "editor.action.formatDocument.none",
     "when": "editorTextFocus && !editorHasDocumentFormattingProvider && !editorReadonly"
   },
-    {
-    "key": "alt+f alt+j",
-    "command": "jumpToNextSnippetPlaceholder",
-    "when": "hasNextTabstop && inSnippetMode && textInputFocus"
-  },
-    {
-    "key": "alt+f alt+k",
-    "command": "jumpToPrevSnippetPlaceholder",
-    "when": "hasPrevTabstop && inSnippetMode && textInputFocus"
-  },
 
   // 9-4. コード実行 (Code Runner連携)
     {
     "key": "alt+f alt+enter",
     "command": "code-runner.run",
     "when": "editorTextFocus"
-  },
-    {
-    "key": "shift+alt+f shift+alt+enter",
-    "command": "code-runner.stop"
   },
   //#endregion
 

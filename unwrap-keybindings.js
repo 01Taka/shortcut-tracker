@@ -8,7 +8,8 @@ const vm = require("vm");
 
 // 優先度の強さ定義（数値が大きいほど優先度が高い）
 const PRIORITY_LEVELS = {
-  new: 4,
+  new: 5,
+  core: 4,
   primary: 3,
   secondary: 2,
   tertiary: 1,
@@ -16,32 +17,77 @@ const PRIORITY_LEVELS = {
 
 // デフォルトの出力優先度（CLI引数で指定されない場合に使用）
 // "new" | "primary" | "secondary" | "tertiary"
-const DEFAULT_PRIORITY = "tertiary";
+const DEFAULT_PRIORITY = "primary";
 
 // 入力パス
-const inputPath = path.join(
+const defaultInputPath = path.join(
   process.env.APPDATA || "C:\\Users\\user\\AppData\\Roaming",
   "Code",
   "User",
   "keybindings.json",
 );
-
-// 出力パス
-const outputPath = path.join(process.cwd(), "keybindings.default.jsonc");
+const fallbackInputPath = path.join(
+  process.cwd(),
+  "shortcuts-log",
+  "2026-10-18-v3.jsonc",
+);
+const inputPath = fs.existsSync(defaultInputPath)
+  ? defaultInputPath
+  : fallbackInputPath;
 
 // ----------------------------------------------------
 // 関数
 // ----------------------------------------------------
 
 /**
- * 実行時引数またはデフォルト設定からターゲットの優先度を取得
+ * 実行時引数をパース
  */
-function getSelectedPriority() {
-  const arg = process.argv[2]?.replace(/^--priority=/, "").toLowerCase();
-  if (arg && PRIORITY_LEVELS[arg]) {
-    return arg;
+function parseCliOptions() {
+  const options = {
+    priority: DEFAULT_PRIORITY,
+    excludeRunCommands: false,
+    inputPath: null,
+    outputPath: null,
+  };
+
+  for (const arg of process.argv.slice(2)) {
+    const lower = arg.toLowerCase();
+    if (lower.startsWith("--priority=")) {
+      const p = lower.slice("--priority=".length);
+      if (PRIORITY_LEVELS[p]) {
+        options.priority = p;
+      }
+    } else if (PRIORITY_LEVELS[lower]) {
+      // 引数で直接優先度名が渡された場合 (後方互換性)
+      options.priority = lower;
+    } else if (
+      lower === "--light" ||
+      lower === "--no-run-commands" ||
+      lower === "--exclude-run-commands" ||
+      lower === "--without-run-commands"
+    ) {
+      options.excludeRunCommands = true;
+    } else if (lower.startsWith("--input=")) {
+      const val = arg.slice(arg.indexOf("=") + 1);
+      options.inputPath = path.resolve(val);
+    } else if (lower.startsWith("--out=") || lower.startsWith("--output=")) {
+      const val = arg.slice(arg.indexOf("=") + 1);
+      options.outputPath = path.resolve(val);
+    }
   }
-  return DEFAULT_PRIORITY;
+
+  if (!options.inputPath) {
+    options.inputPath = inputPath;
+  }
+
+  if (!options.outputPath) {
+    const fileName = options.excludeRunCommands
+      ? "keybindings.light.jsonc"
+      : "keybindings.default.jsonc";
+    options.outputPath = path.join(process.cwd(), fileName);
+  }
+
+  return options;
 }
 
 /**
@@ -53,9 +99,35 @@ function parseLooseObject(content) {
 }
 
 /**
- * 指定した優先度の閾値に合致するか判定
+ * args.keep === true (または item.keep === true) かどうかを判定
  */
-function shouldIncludeItem(item, targetPriority) {
+function isKeptItem(item) {
+  return item?.args?.keep === true || item?.keep === true;
+}
+
+/**
+ * runCommands (または workbench.action.runCommands) かどうかを判定
+ */
+function isRunCommandsItem(item) {
+  if (item?.command === "myTracker.trackAndRun" && item.args) {
+    const cmd = item.args.command;
+    return cmd === "runCommands" || cmd === "workbench.action.runCommands";
+  }
+  return (
+    item?.command === "runCommands" ||
+    item?.command === "workbench.action.runCommands"
+  );
+}
+
+/**
+ * 指定した優先度の閾値および各種フィルターに合致するか判定
+ */
+function shouldIncludeItem(item, { targetPriority, excludeRunCommands = false }) {
+  // runCommands 除外オプション (keep: true が指定されている場合は除外しない)
+  if (excludeRunCommands && !isKeptItem(item) && isRunCommandsItem(item)) {
+    return false;
+  }
+
   // myTracker.trackAndRun かつ priority が指定されている場合
   if (item?.command === "myTracker.trackAndRun" && item.args?.priority) {
     const itemPriority = String(item.args.priority).toLowerCase();
@@ -88,19 +160,35 @@ function unwrapItem(item) {
     }
     return result;
   }
+
+  // 通常アイテムで keep プロパティが存在する場合はクリーンアップ
+  if (item && "keep" in item) {
+    const { keep, ...rest } = item;
+    return rest;
+  }
+
   return item;
 }
 
 /**
  * ファイル全体を走査し、コメントを維持しながらオブジェクトを変換・フィルタリング
  */
-function processKeybindingsFile(rawText, targetPriority) {
+function processKeybindingsFile(rawText, options) {
+  const targetPriority = options.priority;
+  const excludeRunCommands = options.excludeRunCommands;
+
   // BOM除去
   let text = rawText.charCodeAt(0) === 0xfeff ? rawText.slice(1) : rawText;
 
   let result = "";
   let i = 0;
   const len = text.length;
+
+  let totalItems = 0;
+  let includedItems = 0;
+  let excludedRunCommandsCount = 0;
+  let excludedPriorityCount = 0;
+  let keptRunCommandsCount = 0;
 
   while (i < len) {
     // 1行コメント (//#region, //#endregion, // ... など)
@@ -162,9 +250,21 @@ function processKeybindingsFile(rawText, targetPriority) {
       const blockText = text.slice(start, i);
       try {
         const parsed = parseLooseObject(blockText);
+        totalItems++;
 
-        // 優先度フィルターの判定
-        if (!shouldIncludeItem(parsed, targetPriority)) {
+        // フィルター判定
+        const include = shouldIncludeItem(parsed, {
+          targetPriority,
+          excludeRunCommands,
+        });
+
+        if (!include) {
+          if (excludeRunCommands && !isKeptItem(parsed) && isRunCommandsItem(parsed)) {
+            excludedRunCommandsCount++;
+          } else {
+            excludedPriorityCount++;
+          }
+
           // 除外対象の場合: 直前のインデント（空白）を取り消す
           let trimIdx = result.length;
           while (
@@ -194,6 +294,11 @@ function processKeybindingsFile(rawText, targetPriority) {
           continue;
         }
 
+        includedItems++;
+        if (excludeRunCommands && isKeptItem(parsed) && isRunCommandsItem(parsed)) {
+          keptRunCommandsCount++;
+        }
+
         const unwrapped = unwrapItem(parsed);
 
         // インデント（2スペース）をつけて整形
@@ -215,28 +320,56 @@ function processKeybindingsFile(rawText, targetPriority) {
     i++;
   }
 
-  return result;
+  return {
+    content: result,
+    stats: {
+      total: totalItems,
+      included: includedItems,
+      excludedRunCommands: excludedRunCommandsCount,
+      excludedPriority: excludedPriorityCount,
+      keptRunCommands: keptRunCommandsCount,
+    },
+  };
 }
 
 function run() {
   try {
-    const targetPriority = getSelectedPriority();
+    const options = parseCliOptions();
     console.log(
-      `Target priority threshold: "${targetPriority}" (includes higher priorities)`,
+      `Target priority threshold: "${options.priority}" (includes higher priorities)`,
     );
-    console.log(`Reading from: ${inputPath}`);
+    if (options.excludeRunCommands) {
+      console.log(`Mode: Lightweight (excluding runCommands except keep: true)`);
+    }
+    console.log(`Reading from: ${options.inputPath}`);
 
-    if (!fs.existsSync(inputPath)) {
-      throw new Error(`File not found: ${inputPath}`);
+    if (!fs.existsSync(options.inputPath)) {
+      throw new Error(`File not found: ${options.inputPath}`);
     }
 
-    const rawContent = fs.readFileSync(inputPath, "utf-8");
-    const outputContent = processKeybindingsFile(rawContent, targetPriority);
+    const rawContent = fs.readFileSync(options.inputPath, "utf-8");
+    const { content: outputContent, stats } = processKeybindingsFile(
+      rawContent,
+      options,
+    );
 
-    fs.writeFileSync(outputPath, outputContent, "utf-8");
-    console.log(`Successfully generated: ${outputPath}`);
+    fs.writeFileSync(options.outputPath, outputContent, "utf-8");
+    console.log(`Successfully generated: ${options.outputPath}`);
+    console.log(
+      `Keybinding stats: ${stats.included} included / ${stats.total} total` +
+        (stats.excludedRunCommands > 0
+          ? ` (${stats.excludedRunCommands} runCommands excluded)`
+          : "") +
+        (stats.keptRunCommands > 0
+          ? ` (${stats.keptRunCommands} runCommands protected via keep: true)`
+          : "") +
+        (stats.excludedPriority > 0
+          ? ` (${stats.excludedPriority} priority-filtered)`
+          : ""),
+    );
   } catch (error) {
     console.error("Failed to process keybindings:", error);
+    process.exitCode = 1;
   }
 }
 
