@@ -1390,7 +1390,7 @@
     "args": {
       "keyName": "editor.action.copyLinesUpAction (shift+alt+[Quote])",
       "command": "editor.action.copyLinesUpAction",
-      "priority": "secondary",
+      "priority": "primary",
       "group": "text-editing/line-structure",
     },
     "when": "editorTextFocus && !editorReadonly",
@@ -2201,7 +2201,7 @@
     "args": {
       "keyName": "filesExplorer.openFilePreserveFocus (alt+m)",
       "command": "filesExplorer.openFilePreserveFocus",
-      "priority": "secondary",
+      "priority": "primary",
       "group": "universal-confirm/list-commit",
     },
     "when": "filesExplorerFocus && !explorerResourceIsFolder && !inputFocus",

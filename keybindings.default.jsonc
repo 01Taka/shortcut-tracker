@@ -448,6 +448,11 @@
     "when": "editorTextFocus && !editorReadonly"
   },
     {
+    "key": "shift+alt+[Quote]",
+    "command": "editor.action.copyLinesUpAction",
+    "when": "editorTextFocus && !editorReadonly"
+  },
+    {
     "key": "shift+alt+[Semicolon]",
     "command": "editor.action.copyLinesDownAction",
     "when": "editorTextFocus && !editorReadonly"
@@ -615,6 +620,11 @@
     "command": "list.toggleExpand",
     "when": "(treeElementCanExpand || treeElementCanCollapse) && listFocus && !inputFocus && !treestickyScrollFocused"
   },
+    {
+    "key": "alt+m",
+    "command": "filesExplorer.openFilePreserveFocus",
+    "when": "filesExplorerFocus && !explorerResourceIsFolder && !inputFocus"
+  },
   //#endregion
 
   //#region Module 6: 【ユニバーサル脱出 (Alt+E)】
@@ -712,55 +722,6 @@
   },
 
   //  7-4. サイドバー・パネル管理
-    {
-    "key": "alt+f alt+j",
-    "command": "workbench.action.focusActiveEditorGroup",
-    "when": "panelFocus"
-  },
-    {
-    "key": "alt+f alt+j",
-    "command": "workbench.action.focusPanel",
-    "when": "!panelFocus"
-  },
-    {
-    "key": "shift+alt+f shift+alt+j",
-    "command": "workbench.action.togglePanel"
-  },
-    {
-    "key": "alt+f alt+e",
-    "command": "workbench.action.toggleSidebarVisibility",
-    "when": "sideBarFocus && activeViewlet == 'workbench.view.explorer'"
-  },
-    {
-    "key": "alt+f alt+e",
-    "command": "workbench.view.explorer",
-    "when": "!sideBarFocus || activeViewlet != 'workbench.view.explorer'"
-  },
-    {
-    "key": "alt+f alt+g",
-    "command": "workbench.action.toggleSidebarVisibility",
-    "when": "sideBarFocus && activeViewlet == 'workbench.view.scm' && inputFocus"
-  },
-    {
-    "key": "alt+f alt+g",
-    "command": "workbench.scm.action.focusNextInput",
-    "when": "sideBarFocus && activeViewlet == 'workbench.view.scm' && !inputFocus"
-  },
-    {
-    "key": "alt+f alt+g",
-    "command": "workbench.view.scm",
-    "when": "!sideBarFocus || activeViewlet != 'workbench.view.scm'"
-  },
-    {
-    "key": "alt+f alt+s",
-    "command": "workbench.action.toggleSidebarVisibility",
-    "when": "sideBarFocus && activeViewlet == 'workbench.view.search' && inputFocus"
-  },
-    {
-    "key": "alt+f alt+s",
-    "command": "workbench.action.findInFiles",
-    "when": "!sideBarFocus || activeViewlet != 'workbench.view.search' || !inputFocus"
-  },
   //#endregion
 
   //#region Module 8: 【エクスプローラー】
@@ -857,6 +818,10 @@
 
   // --- 自動追加検出用セパレーター（GUI等でキーバインドを追加した際に下部へ追記される目印） ---
     {
-    "key": "-"
+    "key": "-",
+    "args": {
+      "command": "noop",
+      "priority": "tertiary"
+    }
   },
 ]

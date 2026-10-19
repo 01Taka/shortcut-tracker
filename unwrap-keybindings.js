@@ -46,13 +46,27 @@ function parseCliOptions() {
   const options = {
     priority: DEFAULT_PRIORITY,
     excludeRunCommands: false,
+    noComments: false,
+    isFull: false,
+    mode: null,
     inputPath: null,
     outputPath: null,
   };
 
   for (const arg of process.argv.slice(2)) {
     const lower = arg.toLowerCase();
-    if (lower.startsWith("--priority=")) {
+    if (lower === "--light") {
+      // --light は --no-run-commands --no-comments --priority=primary と同義
+      options.excludeRunCommands = true;
+      options.noComments = true;
+      options.priority = "primary";
+      options.mode = "light";
+    } else if (lower === "--full" || lower === "--all") {
+      // --full は priority や runCommands に関わらずすべて出力
+      options.isFull = true;
+      options.excludeRunCommands = false;
+      options.mode = "full";
+    } else if (lower.startsWith("--priority=")) {
       const p = lower.slice("--priority=".length);
       if (PRIORITY_LEVELS[p]) {
         options.priority = p;
@@ -61,12 +75,18 @@ function parseCliOptions() {
       // 引数で直接優先度名が渡された場合 (後方互換性)
       options.priority = lower;
     } else if (
-      lower === "--light" ||
       lower === "--no-run-commands" ||
       lower === "--exclude-run-commands" ||
       lower === "--without-run-commands"
     ) {
       options.excludeRunCommands = true;
+    } else if (
+      lower === "--no-comments" ||
+      lower === "--no-comment" ||
+      lower === "--strip-comments" ||
+      lower === "--without-comments"
+    ) {
+      options.noComments = true;
     } else if (lower.startsWith("--input=")) {
       const val = arg.slice(arg.indexOf("=") + 1);
       options.inputPath = path.resolve(val);
@@ -81,9 +101,12 @@ function parseCliOptions() {
   }
 
   if (!options.outputPath) {
-    const fileName = options.excludeRunCommands
-      ? "keybindings.light.jsonc"
-      : "keybindings.default.jsonc";
+    let fileName = "keybindings.default.jsonc";
+    if (options.mode === "light" || options.excludeRunCommands) {
+      fileName = "keybindings.light.jsonc";
+    } else if (options.isFull) {
+      fileName = "keybindings.full.jsonc";
+    }
     options.outputPath = path.join(process.cwd(), fileName);
   }
 
@@ -122,7 +145,15 @@ function isRunCommandsItem(item) {
 /**
  * 指定した優先度の閾値および各種フィルターに合致するか判定
  */
-function shouldIncludeItem(item, { targetPriority, excludeRunCommands = false }) {
+function shouldIncludeItem(
+  item,
+  { targetPriority, excludeRunCommands = false, isFull = false },
+) {
+  // --full の場合、priority や runCommands に関わらずすべて含める
+  if (isFull) {
+    return true;
+  }
+
   // runCommands 除外オプション (keep: true が指定されている場合は除外しない)
   if (excludeRunCommands && !isKeptItem(item) && isRunCommandsItem(item)) {
     return false;
@@ -184,6 +215,7 @@ function processKeybindingsFile(rawText, options) {
   let i = 0;
   const len = text.length;
 
+  const items = [];
   let totalItems = 0;
   let includedItems = 0;
   let excludedRunCommandsCount = 0;
@@ -256,6 +288,7 @@ function processKeybindingsFile(rawText, options) {
         const include = shouldIncludeItem(parsed, {
           targetPriority,
           excludeRunCommands,
+          isFull: options.isFull,
         });
 
         if (!include) {
@@ -300,6 +333,7 @@ function processKeybindingsFile(rawText, options) {
         }
 
         const unwrapped = unwrapItem(parsed);
+        items.push(unwrapped);
 
         // インデント（2スペース）をつけて整形
         const formatted = JSON.stringify(unwrapped, null, 2)
@@ -320,8 +354,12 @@ function processKeybindingsFile(rawText, options) {
     i++;
   }
 
+  const finalContent = options.noComments
+    ? JSON.stringify(items, null, 2) + "\n"
+    : result;
+
   return {
-    content: result,
+    content: finalContent,
     stats: {
       total: totalItems,
       included: includedItems,
@@ -335,11 +373,20 @@ function processKeybindingsFile(rawText, options) {
 function run() {
   try {
     const options = parseCliOptions();
-    console.log(
-      `Target priority threshold: "${options.priority}" (includes higher priorities)`,
-    );
-    if (options.excludeRunCommands) {
-      console.log(`Mode: Lightweight (excluding runCommands except keep: true)`);
+    if (options.isFull) {
+      console.log(
+        `Mode: Full (all keybindings included regardless of priority or runCommands)`,
+      );
+    } else {
+      console.log(
+        `Target priority threshold: "${options.priority}" (includes higher priorities)`,
+      );
+      if (options.excludeRunCommands) {
+        console.log(`Mode: Lightweight (excluding runCommands except keep: true)`);
+      }
+    }
+    if (options.noComments) {
+      console.log(`Comments: excluded (pure JSON format)`);
     }
     console.log(`Reading from: ${options.inputPath}`);
 
