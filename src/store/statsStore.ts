@@ -45,8 +45,32 @@ export class StatsStore {
     vscode.TextDocument,
     DocExtCacheEntry
   >();
+  private readonly changeListeners = new Set<() => void>();
 
   constructor(public readonly context: vscode.ExtensionContext) {}
+
+  /**
+   * 統計データの変更通知を購読する（パネルが開いている間のみ登録される軽量リスナー）
+   */
+  public onDidChange(listener: () => void): vscode.Disposable {
+    this.changeListeners.add(listener);
+    return new vscode.Disposable(() => {
+      this.changeListeners.delete(listener);
+    });
+  }
+
+  private notifyChanged(): void {
+    if (this.changeListeners.size === 0) {
+      return;
+    }
+    for (const listener of this.changeListeners) {
+      try {
+        listener();
+      } catch (error) {
+        console.error("StatsStore change listener error", error);
+      }
+    }
+  }
 
   private ensureLoaded(): void {
     if (this.loaded) {
@@ -197,6 +221,7 @@ export class StatsStore {
     }
 
     this.scheduleFlush();
+    this.notifyChanged();
   }
 
   public getStatsByExt(): StatsByExtension {
@@ -225,6 +250,7 @@ export class StatsStore {
   public async markStatsModified(): Promise<void> {
     this.ensureLoaded();
     this.dirtyStats = true;
+    this.notifyChanged();
     await this.flush();
   }
 
@@ -234,6 +260,7 @@ export class StatsStore {
     this.lastTrackedKey = undefined;
     this.dirtyStats = false;
     this.dirtyLastKey = false;
+    this.notifyChanged();
 
     await Promise.all([
       this.context.globalState.update("shortcutStatsByExt", {}),
@@ -252,6 +279,7 @@ export class StatsStore {
     }
     this.sessionData = sessionData;
     this.dirtySession = true;
+    this.notifyChanged();
     await this.flush();
   }
 
@@ -266,6 +294,7 @@ export class StatsStore {
       keybindingsDiff: undefined,
     };
     this.dirtySession = true;
+    this.notifyChanged();
     await this.flush();
   }
 

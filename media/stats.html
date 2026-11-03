@@ -3,708 +3,410 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      font-family: var(--vscode-font-family);
-      color: var(--vscode-foreground);
-      padding: 24px;
-      max-width: 900px;
-      margin: 0 auto;
-      line-height: 1.5;
-    }
-    .header-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    h2 {
-      margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 20px;
-      font-weight: 600;
-    }
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .action-btn {
-      background: var(--vscode-button-secondaryBackground, #3a3d41);
-      color: var(--vscode-button-secondaryForeground, #ffffff);
-      border: 1px solid var(--vscode-button-border, transparent);
-      padding: 6px 12px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.15s ease;
-      white-space: nowrap;
-    }
-    .action-btn:hover {
-      background: var(--vscode-button-secondaryHoverBackground, #45494e);
-    }
-    .action-btn.danger-btn {
-      color: var(--vscode-errorForeground, #f48771);
-      border-color: rgba(244, 135, 113, 0.4);
-    }
-    .action-btn.danger-btn:hover {
-      background: var(--vscode-statusBarItem-errorBackground, #c72e2e);
-      color: #ffffff;
-      border-color: transparent;
-    }
-    .summary-cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-    .card {
-      border: 1px solid var(--vscode-widget-border, #444);
-      background: var(--vscode-editor-background);
-      padding: 16px;
-      border-radius: 6px;
-    }
-    .card-title {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--vscode-descriptionForeground);
-      margin-bottom: 6px;
-    }
-    .card-value {
-      font-size: 24px;
-      font-weight: bold;
-    }
-    .card-desc {
-      font-size: 12px;
-      color: var(--vscode-descriptionForeground);
-      margin-top: 4px;
-    }
-    .toolbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-      border-bottom: 1px solid var(--vscode-widget-border, #444);
-      margin-bottom: 12px;
-      padding-bottom: 4px;
-    }
-    .tabs {
-      display: flex;
-      gap: 4px;
-    }
-    .tab-btn {
-      background: transparent;
-      border: none;
-      border-bottom: 2px solid transparent;
-      color: var(--vscode-foreground);
-      padding: 8px 14px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
-      opacity: 0.7;
-      transition: all 0.15s ease;
-    }
-    .tab-btn:hover {
-      opacity: 1;
-    }
-    .tab-btn.active {
-      opacity: 1;
-      border-bottom-color: var(--vscode-button-background);
-      font-weight: bold;
-    }
-    .data-actions {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .action-group-label {
-      font-size: 11px;
-      color: var(--vscode-descriptionForeground);
-      margin-right: 2px;
-    }
-    .search-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
-      background: var(--vscode-editor-background);
-      border: 1px solid var(--vscode-widget-border, #333);
-      padding: 6px 10px;
-      border-radius: 6px;
-    }
-    .search-input-wrapper {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      position: relative;
-    }
-    .search-icon {
-      font-size: 12px;
-      opacity: 0.7;
-      margin-right: 6px;
-      user-select: none;
-    }
-    .search-input {
-      flex: 1;
-      background: transparent;
-      color: var(--vscode-input-foreground);
-      border: none;
-      font-family: var(--vscode-font-family);
-      font-size: 13px;
-      outline: none;
-      width: 100%;
-    }
-    .search-input::placeholder {
-      color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground));
-    }
-    .clear-icon-btn {
-      background: transparent;
-      border: none;
-      color: var(--vscode-descriptionForeground);
-      cursor: pointer;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .clear-icon-btn:hover {
-      color: var(--vscode-foreground);
-      background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2));
-    }
-    .search-submit-btn {
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-    }
-    .search-submit-btn:hover {
-      background: var(--vscode-button-hoverBackground);
-    }
-    .search-count-badge {
-      font-size: 11px;
-      color: var(--vscode-descriptionForeground);
-      padding: 2px 8px;
-      background: var(--vscode-badge-background, rgba(128,128,128,0.15));
-      border-radius: 10px;
-      white-space: nowrap;
-      display: none;
-    }
-    .tab-content {
-      display: none;
-    }
-    .tab-content.active {
-      display: block;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-    }
-    th {
-      padding: 10px 12px;
-      border-bottom: 2px solid var(--vscode-widget-border, #444);
-      font-size: 12px;
-      color: var(--vscode-descriptionForeground);
-    }
-    td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--vscode-widget-border, #444);
-    }
-    .key-col {
-      font-family: var(--vscode-editor-font-family, monospace);
-    }
-    code {
-      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.15));
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-    .num-col {
-      text-align: right;
-    }
-    .sub {
-      font-size: 11px;
-      color: var(--vscode-descriptionForeground);
-      font-weight: normal;
-    }
-    .empty {
-      padding: 24px;
-      text-align: center;
-      color: var(--vscode-descriptionForeground);
-    }
-    .footer-info {
-      margin-top: 24px;
-      font-size: 12px;
-      color: var(--vscode-descriptionForeground);
-    }
-    .session-banner {
-      background: var(--vscode-editor-background);
-      border: 1px solid var(--vscode-widget-border, #444);
-      border-radius: 6px;
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-    .session-banner-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .status-badge.active {
-      background: rgba(78, 201, 176, 0.2);
-      color: #4ec9b0;
-      border: 1px solid rgba(78, 201, 176, 0.4);
-    }
-    .status-badge.inactive {
-      background: rgba(128, 128, 128, 0.2);
-      color: var(--vscode-descriptionForeground);
-      border: 1px solid rgba(128, 128, 128, 0.4);
-    }
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-    .session-stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 12px;
-      margin-bottom: 6px;
-    }
-    .session-stat-item {
-      display: flex;
-      flex-direction: column;
-    }
-    .session-stat-label {
-      font-size: 11px;
-      color: var(--vscode-descriptionForeground);
-    }
-    .session-stat-value {
-      font-size: 15px;
-      font-weight: 600;
-      margin-top: 2px;
-    }
-    .session-controls {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .action-btn.primary-btn {
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-    }
-    .action-btn.primary-btn:hover {
-      background: var(--vscode-button-hoverBackground);
-    }
-    .diff-container {
-      background: var(--vscode-editor-background);
-      border: 1px solid var(--vscode-widget-border, #444);
-      border-radius: 6px;
-      padding: 12px 14px;
-      margin-bottom: 16px;
-    }
-    .empty-diff {
-      color: var(--vscode-descriptionForeground);
-      font-size: 12px;
-      text-align: center;
-      padding: 10px;
-    }
-    .diff-badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: bold;
-      text-align: center;
-    }
-    .diff-badge-added {
-      background: rgba(78, 201, 176, 0.2);
-      color: #4ec9b0;
-      border: 1px solid rgba(78, 201, 176, 0.4);
-    }
-    .diff-badge-removed {
-      background: rgba(244, 135, 113, 0.2);
-      color: #f48771;
-      border: 1px solid rgba(244, 135, 113, 0.4);
-    }
-    .diff-badge-modified {
-      background: rgba(220, 160, 40, 0.2);
-      color: #dcdcaa;
-      border: 1px solid rgba(220, 160, 40, 0.4);
-    }
-  </style>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src {{CSP_SOURCE}} 'unsafe-inline'; script-src 'nonce-{{NONCE}}';">
+  <link rel="stylesheet" href="{{STYLE_URI}}">
+  <title>ショートカット利用統計</title>
 </head>
 <body>
-  <div class="header-bar">
-    <h2>📊 ショートカット利用統計</h2>
-    <div class="header-actions">
-      <button class="action-btn" onclick="refreshStats()">🔄 統計を更新</button>
-      <button class="action-btn danger-btn" onclick="resetStats()">🗑️ 統計を削除</button>
-    </div>
-  </div>
-
-  <div class="summary-cards">
-    <div class="card">
-      <div class="card-title">① 現行の統計 (全入力)</div>
-      <div class="card-value">{{TOTAL_INPUTS}} <span style="font-size: 14px;">回</span></div>
-      <div class="card-desc">連続打鍵も含めた総実行回数</div>
-    </div>
-    <div class="card">
-      <div class="card-title">② 連続除外統計 (非連続)</div>
-      <div class="card-value">{{TOTAL_NON_CONSECUTIVE}} <span style="font-size: 14px;">回</span></div>
-      <div class="card-desc">同一キーの連続入力を1回として集計</div>
-    </div>
-    <div class="card">
-      <div class="card-title">連続リピート回数</div>
-      <div class="card-value">{{CONSECUTIVE_INPUTS}} <span style="font-size: 14px;">回</span></div>
-      <div class="card-desc">{{REPEAT_RATE}}% が同一キーの連続入力</div>
-    </div>
-  </div>
-
-  <div class="toolbar">
-    <div class="tabs">
-      <button id="btn-tab-compare" class="tab-btn active" onclick="showTab('tab-compare', this)">比較ビュー</button>
-      <button id="btn-tab-raw" class="tab-btn" onclick="showTab('tab-raw', this)">現行の統計 (全入力)</button>
-      <button id="btn-tab-dedup" class="tab-btn" onclick="showTab('tab-dedup', this)">連続除外統計 (非連続)</button>
-      <button id="btn-tab-session" class="tab-btn" onclick="showTab('tab-session', this)">⏱️ セッション統計</button>
-    </div>
-    <div class="data-actions">
-      <span class="action-group-label">データ:</span>
-      <button class="action-btn" onclick="copyTsv()">📊 TSVコピー (AI用)</button>
-      <button class="action-btn" onclick="copyJson()">📋 JSONコピー</button>
-      <button class="action-btn" onclick="importJson()">📥 インポート</button>
-    </div>
-  </div>
-
-  <div class="search-bar">
-    <div class="search-input-wrapper">
-      <span class="search-icon">🔍</span>
-      <input
-        type="text"
-        id="search-input"
-        class="search-input"
-        placeholder="キー名でフィルタリング (例: ctrl, shift, enter)..."
-        oninput="onSearchInput()"
-        onkeydown="handleSearchKeyDown(event)"
-      />
-      <button id="search-clear-btn" class="clear-icon-btn" onclick="clearFilter()" style="display: none;" title="クリア">✕</button>
-    </div>
-    <button class="action-btn search-submit-btn" onclick="applyFilter()">検索</button>
-    <span id="search-count" class="search-count-badge"></span>
-  </div>
-
-  <div id="tab-compare" class="tab-content active">
-    <table>
-      <thead>
-        <tr>
-          <th>キーバインド</th>
-          <th style="text-align: right;">現行統計 (全入力)</th>
-          <th style="text-align: right;">連続除外統計 (非連続)</th>
-          <th style="text-align: right;">連続リピート率</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{COMPARISON_ROWS}}
-      </tbody>
-    </table>
-  </div>
-
-  <div id="tab-raw" class="tab-content">
-    <table>
-      <thead>
-        <tr>
-          <th>キーバインド</th>
-          <th style="text-align: right;">使用回数</th>
-          <th style="text-align: right;">割合</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{RAW_ROWS}}
-      </tbody>
-    </table>
-  </div>
-
-  <div id="tab-dedup" class="tab-content">
-    <table>
-      <thead>
-        <tr>
-          <th>キーバインド</th>
-          <th style="text-align: right;">使用回数 (非連続)</th>
-          <th style="text-align: right;">割合</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{NON_CONSECUTIVE_ROWS}}
-      </tbody>
-    </table>
-  </div>
-
-  <div id="tab-session" class="tab-content">
-    <div class="session-banner">
-      <div class="session-banner-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <h3 style="margin: 0; font-size: 15px;">⏱️ セッション計測 (特定期間の追跡)</h3>
-          {{SESSION_STATUS_BADGE}}
-        </div>
-        <div class="session-controls">
-          {{SESSION_TOGGLE_BTN}}
-          <button class="action-btn danger-btn" onclick="resetSession()">🔄 リセット</button>
-          <button class="action-btn" onclick="exportSessionToDirectory()">💾 フォルダに保存</button>
-          <button class="action-btn" onclick="copySessionTsv()">📊 TSVコピー</button>
-          <button class="action-btn" onclick="copySessionJson()">📋 JSONコピー</button>
+  <div class="dashboard">
+    <!-- トップヘッダー: タイトル & モード切替 -->
+    <header class="top-header">
+      <div class="brand-area">
+        <h1 class="app-title">ショートカット利用統計</h1>
+        <div id="last-key-pill" class="last-key-pill" title="直前に追跡されたショートカット">
+          <span class="last-key-label">直前:</span>
+          <span id="last-key-content" class="last-key-value">(なし)</span>
         </div>
       </div>
-      <div class="session-stats-grid">
-        <div class="session-stat-item">
-          <span class="session-stat-label">計測開始日時</span>
-          <span class="session-stat-value">{{SESSION_STARTED_AT}}</span>
+
+      <div class="header-right">
+        <nav class="mode-tabs" role="tablist" aria-label="表示モード切替">
+          <button
+            type="button"
+            id="mode-tab-global"
+            class="mode-tab active"
+            role="tab"
+            aria-selected="true"
+            data-action="switch-mode"
+            data-mode="global"
+          >
+            <span>累計統計</span>
+            <span id="badge-global-count" class="tab-badge">0</span>
+          </button>
+          <button
+            type="button"
+            id="mode-tab-session"
+            class="mode-tab"
+            role="tab"
+            aria-selected="false"
+            data-action="switch-mode"
+            data-mode="session"
+          >
+            <span>セッション計測</span>
+            <span id="badge-session-status" class="tab-badge">停止中</span>
+          </button>
+        </nav>
+
+        <button
+          type="button"
+          class="btn btn-ghost icon-btn"
+          data-action="refresh"
+          title="統計を手動更新"
+        >
+          ↻ 更新
+        </button>
+      </div>
+    </header>
+
+    <!-- セッション専用コントロールバー (セッションモード時のみ表示) -->
+    <section id="session-hero" class="session-hero hidden" aria-label="セッション計測操作">
+      <div class="session-hero-main">
+        <div class="session-state-group">
+          <span id="session-live-badge" class="live-status-badge inactive">
+            <span class="pulse-dot"></span>
+            <span id="session-live-text">停止中</span>
+          </span>
+          <div class="session-timer-block">
+            <span class="meta-label">経過時間</span>
+            <span id="session-duration" class="session-timer-value">0秒</span>
+          </div>
+          <div class="session-meta-divider"></div>
+          <div class="session-meta-item">
+            <span class="meta-label">開始日時</span>
+            <span id="session-started-at" class="meta-value">(未開始)</span>
+          </div>
+          <div class="session-meta-item">
+            <span class="meta-label">初期キーバインド</span>
+            <span id="session-snapshot-info" class="meta-value">未保存</span>
+          </div>
         </div>
-        <div class="session-stat-item">
-          <span class="session-stat-label">計測時間</span>
-          <span class="session-stat-value">{{SESSION_DURATION}}</span>
-        </div>
-        <div class="session-stat-item">
-          <span class="session-stat-label">総入力回数</span>
-          <span class="session-stat-value">{{SESSION_TOTAL_INPUTS}} 回</span>
-        </div>
-        <div class="session-stat-item">
-          <span class="session-stat-label">非連続入力回数</span>
-          <span class="session-stat-value">{{SESSION_NON_CONSECUTIVE}} 回</span>
-        </div>
-        <div class="session-stat-item">
-          <span class="session-stat-label">連続リピート率</span>
-          <span class="session-stat-value">{{SESSION_REPEAT_RATE}}%</span>
-        </div>
-        <div class="session-stat-item">
-          <span class="session-stat-label">キーバインド設定</span>
-          <span class="session-stat-value" style="font-size: 13px;">{{SESSION_SNAPSHOT_INFO}}</span>
+
+        <div class="session-hero-actions">
+          <button
+            type="button"
+            id="btn-session-toggle"
+            class="btn btn-primary"
+            data-action="toggle-session"
+          >
+            ▶ 計測を開始
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-action="export-session-dir"
+            title="セッション統計・差分・初期キーバインドをローカルフォルダに保存"
+          >
+            💾 フォルダに保存
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger-outline"
+            data-action="reset-session"
+            title="セッション計測データのみをリセット（累計統計には影響しません）"
+          >
+            リセット
+          </button>
         </div>
       </div>
-    </div>
+    </section>
 
-    {{KEYBINDINGS_DIFF_SECTION}}
+    <!-- KPI サマリーカード (現在選択中のモード・拡張子フィルタに連動) -->
+    <section class="kpi-grid" aria-label="集計サマリー">
+      <div class="kpi-card">
+        <div class="kpi-label" id="kpi-title-total">総入力回数 (全入力)</div>
+        <div class="kpi-value-row">
+          <span id="kpi-total-inputs" class="kpi-value">0</span>
+          <span class="kpi-unit">回</span>
+        </div>
+        <div id="kpi-sub-total" class="kpi-sub">連続打鍵を含む実行回数</div>
+      </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th>キーバインド</th>
-          <th style="text-align: right;">現行統計 (全入力)</th>
-          <th style="text-align: right;">連続除外統計 (非連続)</th>
-          <th style="text-align: right;">連続リピート率</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{SESSION_ROWS}}
-      </tbody>
-    </table>
+      <div class="kpi-card">
+        <div class="kpi-label">非連続入力回数</div>
+        <div class="kpi-value-row">
+          <span id="kpi-non-consecutive" class="kpi-value">0</span>
+          <span class="kpi-unit">回</span>
+        </div>
+        <div id="kpi-sub-non-consecutive" class="kpi-sub">同一キー連続入力を1回として集計</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label">連続リピート率</div>
+        <div class="kpi-value-row">
+          <span id="kpi-repeat-rate" class="kpi-value">0.0</span>
+          <span class="kpi-unit">%</span>
+        </div>
+        <div class="kpi-meter-track">
+          <div id="kpi-repeat-bar" class="kpi-meter-fill"></div>
+        </div>
+        <div id="kpi-sub-repeat" class="kpi-sub">連続打鍵: 0 回</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label" id="kpi-title-unique">登録項目 / 最頻出</div>
+        <div class="kpi-value-row">
+          <span id="kpi-unique-count" class="kpi-value">0</span>
+          <span id="kpi-unique-unit" class="kpi-unit">種類</span>
+        </div>
+        <div id="kpi-sub-top" class="kpi-sub truncate">最頻出: -</div>
+      </div>
+    </section>
+
+    <!-- セッション キーバインド変更差分アコーディオン (セッションモードかつ差分データ存在時のみ表示) -->
+    <section id="diff-section" class="diff-accordion hidden" aria-label="キーバインド変更差分">
+      <div class="diff-header">
+        <button
+          type="button"
+          id="diff-toggle-btn"
+          class="diff-toggle-btn"
+          data-action="toggle-diff-accordion"
+          aria-expanded="false"
+        >
+          <span id="diff-chevron" class="chevron">▸</span>
+          <span class="diff-title">キーバインドの変更差分</span>
+          <span id="diff-summary-badges" class="diff-badges-group"></span>
+        </button>
+
+        <div class="diff-header-actions">
+          <button
+            type="button"
+            id="btn-copy-diff-json"
+            class="btn btn-secondary btn-sm"
+            data-action="copy-diff-json"
+          >
+            📋 差分JSONコピー
+          </button>
+        </div>
+      </div>
+
+      <div id="diff-body" class="diff-body hidden">
+        <div id="diff-empty-msg" class="diff-empty-msg hidden">
+          セッション開始時からキーバインド設定の変更はありませんでした（開始時と同一）。
+        </div>
+
+        <div id="diff-content-wrap">
+          <div class="diff-filter-bar">
+            <span class="filter-caption">種別フィルタ:</span>
+            <div class="segmented-control" id="diff-filter-group">
+              <button type="button" class="seg-btn active" data-action="filter-diff" data-diff-type="all">すべて</button>
+              <button type="button" class="seg-btn" data-action="filter-diff" data-diff-type="added">追加</button>
+              <button type="button" class="seg-btn" data-action="filter-diff" data-diff-type="modified">変更</button>
+              <button type="button" class="seg-btn" data-action="filter-diff" data-diff-type="removed">削除</button>
+            </div>
+          </div>
+
+          <div class="diff-table-scroll">
+            <table class="data-table diff-table">
+              <thead>
+                <tr>
+                  <th class="col-diff-type">種別</th>
+                  <th class="col-diff-key">キー</th>
+                  <th>変更詳細</th>
+                </tr>
+              </thead>
+              <tbody id="diff-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ファイル拡張子別フィルタチップ -->
+    <section id="ext-filter-bar" class="ext-filter-bar" aria-label="ファイル拡張子フィルタ">
+      <div class="ext-filter-header">
+        <span class="filter-caption">拡張子フィルタ:</span>
+        <button
+          type="button"
+          id="ext-clear-btn"
+          class="link-btn hidden"
+          data-action="clear-ext-filter"
+        >
+          選択解除
+        </button>
+      </div>
+      <div id="ext-chips-container" class="ext-chips"></div>
+    </section>
+
+    <!-- 検索・グルーピング・エクスポート操作ツールバー -->
+    <section class="toolbar-row" aria-label="テーブル操作ツールバー">
+      <div class="toolbar-left">
+        <div class="search-box">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            id="search-input"
+            class="search-input"
+            placeholder="コマンド名・キーで絞り込み (/ でフォーカス)..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <span id="search-count-badge" class="search-count-badge hidden"></span>
+          <button
+            type="button"
+            id="search-clear-btn"
+            class="search-clear-btn hidden"
+            data-action="clear-search"
+            title="検索条件をクリア (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="segmented-control" role="group" aria-label="集計単位の切替">
+          <button
+            type="button"
+            id="group-btn-command"
+            class="seg-btn active"
+            data-action="set-grouping"
+            data-group-mode="command"
+            title="記録されたコマンド＋キー単位で一覧表示します"
+          >
+            コマンド別
+          </button>
+          <button
+            type="button"
+            id="group-btn-key"
+            class="seg-btn"
+            data-action="set-grouping"
+            data-group-mode="key"
+            title="同じ物理キー（例: alt+j）に割り当てられた複数コマンドの打鍵数を合算し、内訳を展開確認できます"
+          >
+            物理キー合算
+          </button>
+        </div>
+      </div>
+
+      <div class="toolbar-right">
+        <!-- TSVコピー（スプリットボタン＋フォーマット選択メニュー） -->
+        <div class="split-btn-wrap" id="tsv-menu-container">
+          <button
+            type="button"
+            class="btn btn-secondary split-main"
+            data-action="copy-tsv-now"
+            title="現在の表示条件・並び順のままTSV形式でクリップボードにコピー"
+          >
+            <span>📊 TSVコピー</span>
+            <span id="tsv-format-hint" class="btn-sub-tag">統合</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary split-trigger"
+            data-action="toggle-tsv-menu"
+            aria-haspopup="true"
+            aria-expanded="false"
+            title="TSVの出力形式を選択"
+          >
+            ▾
+          </button>
+          <div id="tsv-dropdown" class="dropdown-menu hidden" role="menu">
+            <div class="dropdown-header">現在の絞り込み・並び順で即コピー</div>
+            <button type="button" class="dropdown-item" data-action="select-tsv-format" data-tsv-format="unified">
+              <span class="check-mark" id="check-tsv-unified">✓</span>
+              <div class="dropdown-item-body">
+                <div class="dropdown-item-title">統合形式 (推奨・AI分析向け)</div>
+                <div class="dropdown-item-desc">キー / 全入力 / 全入力% / 非連続 / 非連続% / リピート率</div>
+              </div>
+            </button>
+            <button type="button" class="dropdown-item" data-action="select-tsv-format" data-tsv-format="raw">
+              <span class="check-mark" id="check-tsv-raw"></span>
+              <div class="dropdown-item-body">
+                <div class="dropdown-item-title">従来形式: 全入力のみ (3列)</div>
+                <div class="dropdown-item-desc">キー / 回数 / パーセント</div>
+              </div>
+            </button>
+            <button type="button" class="dropdown-item" data-action="select-tsv-format" data-tsv-format="dedup">
+              <span class="check-mark" id="check-tsv-dedup"></span>
+              <div class="dropdown-item-body">
+                <div class="dropdown-item-title">従来形式: 非連続のみ (3列)</div>
+                <div class="dropdown-item-desc">キー / 回数 / パーセント</div>
+              </div>
+            </button>
+            <button type="button" class="dropdown-item" data-action="select-tsv-format" data-tsv-format="both">
+              <span class="check-mark" id="check-tsv-both"></span>
+              <div class="dropdown-item-body">
+                <div class="dropdown-item-title">従来形式: 全入力＋非連続の2表</div>
+                <div class="dropdown-item-desc">2ブロックに分けて出力</div>
+              </div>
+            </button>
+            <div class="dropdown-divider"></div>
+            <button type="button" class="dropdown-item" data-action="open-tsv-quickpick">
+              <span class="check-mark"></span>
+              <div class="dropdown-item-body">
+                <div class="dropdown-item-title">ダイアログで拡張子を選んでコピー...</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-action="copy-json"
+          title="拡張子別の構造化JSONデータをクリップボードにコピー"
+        >
+          📋 JSONコピー
+        </button>
+
+        <div id="global-actions-group" class="inline-actions">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-action="import-json"
+            title="JSON形式の統計データをインポートして合算"
+          >
+            📥 インポート
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger-outline"
+            data-action="reset-global"
+            title="累計統計データをすべて削除"
+          >
+            🗑️ 削除
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 統合ソート対応ランキングテーブル -->
+    <section class="table-container" aria-label="ショートカット使用ランキング">
+      <table class="data-table ranking-table">
+        <thead>
+          <tr>
+            <th class="col-rank">#</th>
+            <th class="col-shortcut sortable" data-action="sort-column" data-sort-key="key">
+              <span class="th-inner">
+                <span>ショートカット / コマンド</span>
+                <span class="sort-indicator" id="sort-ind-key"></span>
+              </span>
+            </th>
+            <th class="col-metric sortable" data-action="sort-column" data-sort-key="total">
+              <span class="th-inner right">
+                <span>全入力 (回数・割合)</span>
+                <span class="sort-indicator" id="sort-ind-total">↓</span>
+              </span>
+            </th>
+            <th class="col-metric sortable" data-action="sort-column" data-sort-key="nonConsecutive">
+              <span class="th-inner right">
+                <span>非連続 (回数・割合)</span>
+                <span class="sort-indicator" id="sort-ind-nonConsecutive"></span>
+              </span>
+            </th>
+            <th class="col-rate sortable" data-action="sort-column" data-sort-key="repeatRate">
+              <span class="th-inner right">
+                <span>リピート率</span>
+                <span class="sort-indicator" id="sort-ind-repeatRate"></span>
+              </span>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="ranking-tbody"></tbody>
+      </table>
+    </section>
   </div>
 
-  <div class="footer-info">
-    直前の入力キー: <code>{{LAST_KEY}}</code>
-  </div>
-
-  <script>
-    const vscode = acquireVsCodeApi();
-    const state = vscode.getState() || {};
-    let currentActiveTab = state.activeTab || 'tab-compare';
-    let currentSearchQuery = state.searchQuery || '';
-
-    function refreshStats() {
-      vscode.postMessage({ command: 'refresh' });
-    }
-
-    function copyTsv() {
-      vscode.postMessage({ command: 'copyTsv', tabType: currentActiveTab });
-    }
-
-    function copyJson() {
-      vscode.postMessage({ command: 'copyJson' });
-    }
-
-    function importJson() {
-      vscode.postMessage({ command: 'importJson' });
-    }
-
-    function resetStats() {
-      vscode.postMessage({ command: 'reset' });
-    }
-
-    function startSession() {
-      vscode.postMessage({ command: 'startSession' });
-    }
-
-    function stopSession() {
-      vscode.postMessage({ command: 'stopSession' });
-    }
-
-    function resetSession() {
-      vscode.postMessage({ command: 'resetSession' });
-    }
-
-    function copySessionTsv() {
-      vscode.postMessage({ command: 'copySessionTsv' });
-    }
-
-    function copySessionJson() {
-      vscode.postMessage({ command: 'copySessionJson' });
-    }
-
-    function exportSessionToDirectory() {
-      vscode.postMessage({ command: 'exportSessionToDirectory' });
-    }
-
-    function copyKeybindingsDiffJson() {
-      vscode.postMessage({ command: 'copyKeybindingsDiffJson' });
-    }
-
-    function showTab(tabId, btn) {
-      currentActiveTab = tabId;
-      saveState();
-      document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
-      document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
-      var target = document.getElementById(tabId);
-      if (target) {
-        target.classList.add('active');
-      }
-      if (btn) {
-        btn.classList.add('active');
-      } else {
-        var defaultBtn = document.getElementById('btn-' + tabId);
-        if (defaultBtn) {
-          defaultBtn.classList.add('active');
-        }
-      }
-      updateFilterForActiveTab();
-    }
-
-    function saveState() {
-      vscode.setState({
-        activeTab: currentActiveTab,
-        searchQuery: currentSearchQuery
-      });
-    }
-
-    function onSearchInput() {
-      const input = document.getElementById('search-input');
-      const clearBtn = document.getElementById('search-clear-btn');
-      if (input.value.length > 0) {
-        clearBtn.style.display = 'flex';
-      } else {
-        clearBtn.style.display = 'none';
-        applyFilter();
-      }
-    }
-
-    function handleSearchKeyDown(event) {
-      if (event.key === 'Enter') {
-        applyFilter();
-      }
-    }
-
-    function applyFilter() {
-      const input = document.getElementById('search-input');
-      currentSearchQuery = input.value.trim().toLowerCase();
-      saveState();
-      updateFilterForActiveTab();
-    }
-
-    function clearFilter() {
-      const input = document.getElementById('search-input');
-      input.value = '';
-      document.getElementById('search-clear-btn').style.display = 'none';
-      currentSearchQuery = '';
-      saveState();
-      updateFilterForActiveTab();
-    }
-
-    function updateFilterForActiveTab() {
-      const query = currentSearchQuery;
-      const countBadge = document.getElementById('search-count');
-      const activeContent = document.getElementById(currentActiveTab);
-      if (!activeContent) return;
-
-      const table = activeContent.querySelector(':scope > table') || activeContent.querySelector('table');
-      if (!table) return;
-
-      const rows = table.querySelectorAll('tbody tr:not(.no-filter-result)');
-      let totalRows = 0;
-      let matchedRows = 0;
-
-      rows.forEach(function(row) {
-        const keyCell = row.querySelector('.key-col');
-        if (!keyCell) return; // 'まだ記録がありません' などの行
-        totalRows++;
-        const keyText = keyCell.textContent.toLowerCase();
-        if (!query || keyText.includes(query)) {
-          row.style.display = '';
-          matchedRows++;
-        } else {
-          row.style.display = 'none';
-        }
-      });
-
-      // 検索中バッジの表示
-      if (query && totalRows > 0) {
-        countBadge.style.display = 'inline-block';
-        countBadge.textContent = `${matchedRows} / ${totalRows} 件一致`;
-      } else {
-        countBadge.style.display = 'none';
-      }
-
-      // 一致なし行の表示制御
-      let noResultRow = table.querySelector('.no-filter-result');
-      if (query && totalRows > 0 && matchedRows === 0) {
-        if (!noResultRow) {
-          const colSpan = table.querySelectorAll('thead th').length;
-          noResultRow = document.createElement('tr');
-          noResultRow.className = 'no-filter-result';
-          noResultRow.innerHTML = `<td colspan="${colSpan}" class="empty">「${escapeHtml(query)}」に一致するキーバインドはありません</td>`;
-          table.querySelector('tbody').appendChild(noResultRow);
-        } else {
-          noResultRow.style.display = '';
-          noResultRow.querySelector('td').textContent = `「${query}」に一致するキーバインドはありません`;
-        }
-      } else if (noResultRow) {
-        noResultRow.style.display = 'none';
-      }
-    }
-
-    function escapeHtml(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-    }
-
-    // 初期化時の復元
-    if (currentActiveTab && currentActiveTab !== 'tab-compare') {
-      showTab(currentActiveTab);
-    }
-    if (currentSearchQuery) {
-      const searchInput = document.getElementById('search-input');
-      searchInput.value = currentSearchQuery;
-      document.getElementById('search-clear-btn').style.display = 'flex';
-      applyFilter();
-    }
-  </script>
+  <!-- 初期データ埋め込み（初回描画ラグ防止） -->
+  <script id="initial-data" type="application/json" nonce="{{NONCE}}">{{INITIAL_JSON}}</script>
+  <script nonce="{{NONCE}}" src="{{SCRIPT_URI}}"></script>
 </body>
 </html>

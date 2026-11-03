@@ -34,8 +34,31 @@ class StatsStore {
     flushTimer;
     activeFlushPromise = Promise.resolve();
     docExtCache = new WeakMap();
+    changeListeners = new Set();
     constructor(context) {
         this.context = context;
+    }
+    /**
+     * 統計データの変更通知を購読する（パネルが開いている間のみ登録される軽量リスナー）
+     */
+    onDidChange(listener) {
+        this.changeListeners.add(listener);
+        return new vscode.Disposable(() => {
+            this.changeListeners.delete(listener);
+        });
+    }
+    notifyChanged() {
+        if (this.changeListeners.size === 0) {
+            return;
+        }
+        for (const listener of this.changeListeners) {
+            try {
+                listener();
+            }
+            catch (error) {
+                console.error("StatsStore change listener error", error);
+            }
+        }
     }
     ensureLoaded() {
         if (this.loaded) {
@@ -160,6 +183,7 @@ class StatsStore {
             this.dirtySession = true;
         }
         this.scheduleFlush();
+        this.notifyChanged();
     }
     getStatsByExt() {
         this.ensureLoaded();
@@ -182,6 +206,7 @@ class StatsStore {
     async markStatsModified() {
         this.ensureLoaded();
         this.dirtyStats = true;
+        this.notifyChanged();
         await this.flush();
     }
     async resetAllStats() {
@@ -190,6 +215,7 @@ class StatsStore {
         this.lastTrackedKey = undefined;
         this.dirtyStats = false;
         this.dirtyLastKey = false;
+        this.notifyChanged();
         await Promise.all([
             this.context.globalState.update("shortcutStatsByExt", {}),
             this.context.globalState.update("shortcutStats", undefined),
@@ -206,6 +232,7 @@ class StatsStore {
         }
         this.sessionData = sessionData;
         this.dirtySession = true;
+        this.notifyChanged();
         await this.flush();
     }
     async resetSession() {
@@ -219,6 +246,7 @@ class StatsStore {
             keybindingsDiff: undefined,
         };
         this.dirtySession = true;
+        this.notifyChanged();
         await this.flush();
     }
     getInitialKeybindingsUri() {
