@@ -4,6 +4,495 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const path = require("path");
 const vscode = require("vscode");
+/**
+ * コメント付きJSON（JSONC）の安全な簡易パーサー
+ */
+function parseJsonc(text) {
+    // BOM除去
+    let clean = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+    let result = "";
+    let inString = false;
+    let inSingleComment = false;
+    let inBlockComment = false;
+    let quoteChar = "";
+    for (let i = 0; i < clean.length; i++) {
+        const char = clean[i];
+        const next = clean[i + 1];
+        if (inSingleComment) {
+            if (char === "\n") {
+                inSingleComment = false;
+                result += char;
+            }
+        }
+        else if (inBlockComment) {
+            if (char === "*" && next === "/") {
+                inBlockComment = false;
+                i++;
+            }
+        }
+        else if (inString) {
+            result += char;
+            if (char === "\\") {
+                i++;
+                if (i < clean.length) {
+                    result += clean[i];
+                }
+            }
+            else if (char === quoteChar) {
+                inString = false;
+            }
+        }
+        else {
+            if (char === "/" && next === "/") {
+                inSingleComment = true;
+                i++;
+            }
+            else if (char === "/" && next === "*") {
+                inBlockComment = true;
+                i++;
+            }
+            else {
+                result += char;
+                if (char === '"' || char === "'") {
+                    inString = true;
+                    quoteChar = char;
+                }
+            }
+        }
+    }
+    // 末尾のカンマ (trailing commas) も除去
+    result = result.replace(/,\s*([}\]])/g, "$1");
+    return JSON.parse(result);
+}
+/**
+ * OSに応じたユーザーキーバインド設定（keybindings.json）のパスを取得
+ */
+function getUserKeybindingsUri() {
+    const appName = vscode.env.appName.toLowerCase();
+    let folderName = "Code";
+    if (appName.includes("insiders")) {
+        folderName = "Code - Insiders";
+    }
+    else if (appName.includes("vscodium") || appName.includes("codium")) {
+        folderName = "VSCodium";
+    }
+    let userDir;
+    if (process.platform === "win32") {
+        const appData = process.env.APPDATA ||
+            (process.env.USERPROFILE
+                ? path.join(process.env.USERPROFILE, "AppData", "Roaming")
+                : undefined);
+        if (appData) {
+            userDir = path.join(appData, folderName, "User");
+        }
+    }
+    else if (process.platform === "darwin") {
+        const home = process.env.HOME;
+        if (home) {
+            userDir = path.join(home, "Library", "Application Support", folderName, "User");
+        }
+    }
+    else {
+        // Linux
+        const configHome = process.env.XDG_CONFIG_HOME ||
+            (process.env.HOME ? path.join(process.env.HOME, ".config") : undefined);
+        if (configHome) {
+            userDir = path.join(configHome, folderName, "User");
+        }
+    }
+    if (userDir) {
+        return vscode.Uri.file(path.join(userDir, "keybindings.json"));
+    }
+    return undefined;
+}
+/**
+ * 現在のユーザーキーバインド設定ファイルを読み込んでパース
+ */
+async function readCurrentKeybindings() {
+    const uri = getUserKeybindingsUri();
+    if (!uri) {
+        return undefined;
+    }
+    try {
+        const bytes = await vscode.workspace.fs.readFile(uri);
+        const rawText = new TextDecoder("utf-8").decode(bytes);
+        const items = parseJsonc(rawText);
+        if (Array.isArray(items)) {
+            return { uri, items, rawText };
+        }
+    }
+    catch (error) {
+        console.error("Failed to read user keybindings.json", error);
+    }
+    return undefined;
+}
+function getExactSignature(item) {
+    if (!item || typeof item !== "object") {
+        return "";
+    }
+    const key = String(item.key || "").toLowerCase().trim();
+    const command = String(item.command || "").trim();
+    const when = String(item.when || "").trim();
+    const argsStr = item.args !== undefined ? JSON.stringify(item.args) : "";
+    return `${key}|#|${command}|#|${when}|#|${argsStr}`;
+}
+/**
+ * 開始時と終了時のキーバインド配列の差分を計算
+ */
+function calculateKeybindingsDiff(initialItems, currentItems) {
+    const initialList = [...initialItems];
+    const currentList = [...currentItems];
+    const matchedInitialIndices = new Set();
+    const matchedCurrentIndices = new Set();
+    // 1. 完全一致を照合
+    for (let cIdx = 0; cIdx < currentList.length; cIdx++) {
+        const cItem = currentList[cIdx];
+        const cSig = getExactSignature(cItem);
+        for (let iIdx = 0; iIdx < initialList.length; iIdx++) {
+            if (matchedInitialIndices.has(iIdx)) {
+                continue;
+            }
+            const iItem = initialList[iIdx];
+            if (getExactSignature(iItem) === cSig) {
+                matchedCurrentIndices.add(cIdx);
+                matchedInitialIndices.add(iIdx);
+                break;
+            }
+        }
+    }
+    const unmatchedInitial = initialList
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ idx }) => !matchedInitialIndices.has(idx));
+    const unmatchedCurrent = currentList
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ idx }) => !matchedCurrentIndices.has(idx));
+    const diffs = [];
+    const matchedModifiedCurrent = new Set();
+    const matchedModifiedInitial = new Set();
+    // 2. modified (同じキーを持つ変更) を照合
+    for (const { item: cItem, idx: cIdx } of unmatchedCurrent) {
+        const cKey = String(cItem.key || "").toLowerCase().trim();
+        for (const { item: iItem, idx: iIdx } of unmatchedInitial) {
+            if (matchedModifiedInitial.has(iIdx)) {
+                continue;
+            }
+            const iKey = String(iItem.key || "").toLowerCase().trim();
+            if (cKey && cKey === iKey) {
+                matchedModifiedCurrent.add(cIdx);
+                matchedModifiedInitial.add(iIdx);
+                diffs.push({
+                    type: "modified",
+                    key: cItem.key,
+                    command: cItem.command,
+                    when: cItem.when,
+                    args: cItem.args,
+                    before: {
+                        command: iItem.command,
+                        when: iItem.when,
+                        args: iItem.args,
+                    },
+                });
+                break;
+            }
+        }
+    }
+    // 3. 残りの unmatchedCurrent は added
+    for (const { item: cItem, idx: cIdx } of unmatchedCurrent) {
+        if (!matchedModifiedCurrent.has(cIdx)) {
+            diffs.push({
+                type: "added",
+                key: cItem.key,
+                command: cItem.command,
+                when: cItem.when,
+                args: cItem.args,
+            });
+        }
+    }
+    // 4. 残りの unmatchedInitial は removed
+    for (const { item: iItem, idx: iIdx } of unmatchedInitial) {
+        if (!matchedModifiedInitial.has(iIdx)) {
+            diffs.push({
+                type: "removed",
+                key: iItem.key,
+                command: iItem.command,
+                when: iItem.when,
+                args: iItem.args,
+            });
+        }
+    }
+    let addedCount = 0;
+    let removedCount = 0;
+    let modifiedCount = 0;
+    for (const d of diffs) {
+        if (d.type === "added") {
+            addedCount++;
+        }
+        else if (d.type === "removed") {
+            removedCount++;
+        }
+        else if (d.type === "modified") {
+            modifiedCount++;
+        }
+    }
+    return {
+        calculatedAt: new Date().toISOString(),
+        initialCount: initialItems.length,
+        currentCount: currentItems.length,
+        addedCount,
+        removedCount,
+        modifiedCount,
+        diffs,
+    };
+}
+/**
+ * 差分結果をワークスペース内の shortcuts-log ディレクトリなどにJSONファイルとして保存
+ */
+async function saveDiffToFile(diff, sessionData) {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) {
+        return undefined;
+    }
+    const root = folders[0].uri;
+    const shortcutsLogDir = vscode.Uri.joinPath(root, "shortcuts-log");
+    let targetDir = root;
+    try {
+        await vscode.workspace.fs.stat(shortcutsLogDir);
+        targetDir = shortcutsLogDir;
+    }
+    catch {
+        targetDir = root;
+    }
+    const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const fileUri = vscode.Uri.joinPath(targetDir, `session-diff-${dateStr}.json`);
+    const payload = {
+        version: 2,
+        type: "sessionKeybindingsDiff",
+        calculatedAt: diff.calculatedAt,
+        session: {
+            startedAt: sessionData.startedAt,
+            stoppedAt: sessionData.stoppedAt,
+            durationMs: sessionData.accumulatedMs,
+        },
+        summary: {
+            initialKeybindingsCount: diff.initialCount,
+            currentKeybindingsCount: diff.currentCount,
+            addedCount: diff.addedCount,
+            removedCount: diff.removedCount,
+            modifiedCount: diff.modifiedCount,
+            totalChanges: diff.diffs.length,
+        },
+        diffs: diff.diffs,
+    };
+    const bytes = new TextEncoder().encode(JSON.stringify(payload, null, 2));
+    await vscode.workspace.fs.writeFile(fileUri, bytes);
+    return fileUri;
+}
+/**
+ * セッション統計データを任意のローカルディレクトリに書き込む
+ * （チェックボックス付き選択で、始めた時点のキーバインドも同時に保存可能）
+ */
+async function exportSessionToDirectoryAction(context, predefinedDirUri) {
+    const sessionData = getSessionData(context);
+    const sessionAggregated = aggregateStats(sessionData.statsByExt);
+    const sessionTotal = Object.values(sessionAggregated.totalStats).reduce((sum, count) => sum + count, 0);
+    // 1. 保存する内容をチェックボックス付き QuickPick でユーザーに確認
+    const pickItems = [
+        {
+            id: "stats",
+            label: "$(graph) セッション統計データを保存",
+            description: "session-stats-*.json (拡張子別打鍵数・集計サマリー・差分概要)",
+            picked: true,
+        },
+    ];
+    if (sessionData.initialKeybindings &&
+        sessionData.initialKeybindings.length > 0) {
+        pickItems.push({
+            id: "initialKeybindings",
+            label: "$(key) 始めた時点でのキーバインド（ショートカット）データを保存",
+            description: `session-initial-keybindings-*.json (${sessionData.initialKeybindings.length.toLocaleString()} 件)`,
+            picked: true, // デフォルトでチェックON
+        });
+    }
+    else {
+        pickItems.push({
+            id: "initialKeybindings",
+            label: "$(key) 現在のキーバインド（ショートカット）データを保存",
+            description: "現在の keybindings.json の内容をスナップショットとして保存",
+            picked: false,
+        });
+    }
+    // ディレクトリとして保存のチェックボックス項目
+    pickItems.push({
+        id: "createSubdirectory",
+        label: "$(folder) ディレクトリとして保存",
+        description: "YYYY-MM-DD-HHmmss のディレクトリを作成してその中に保存する",
+        picked: true, // デフォルトでチェックON
+    });
+    const selectedOptions = await vscode.window.showQuickPick(pickItems, {
+        canPickMany: true,
+        title: "セッション統計データをローカルディレクトリに保存しますか？",
+        placeHolder: "保存するデータにチェックを入れて決定（ESCまたは未選択で保存をスキップ）",
+    });
+    if (!selectedOptions || selectedOptions.length === 0) {
+        return undefined;
+    }
+    const saveStats = selectedOptions.some((item) => item.id === "stats");
+    const saveInitialKeybindings = selectedOptions.some((item) => item.id === "initialKeybindings");
+    const createSubdirectory = selectedOptions.some((item) => item.id === "createSubdirectory");
+    // 2. 保存先ディレクトリの決定
+    let dirUri = predefinedDirUri;
+    if (!dirUri) {
+        const lastExportDir = context.globalState.get("lastSessionExportDir");
+        // 前回フォルダがある場合は選択肢を表示
+        if (lastExportDir) {
+            const dirChoice = await vscode.window.showQuickPick([
+                {
+                    label: `$(folder) 前回と同じフォルダに保存`,
+                    description: lastExportDir,
+                    value: "last",
+                },
+                {
+                    label: `$(folder-opened) 別のディレクトリを選択...`,
+                    description: "フォルダ選択ダイアログを開く",
+                    value: "choose",
+                },
+            ], {
+                title: "保存先ディレクトリの選択",
+                placeHolder: "保存先ディレクトリを選択してください",
+            });
+            if (!dirChoice) {
+                return undefined;
+            }
+            if (dirChoice.value === "last") {
+                dirUri = vscode.Uri.file(lastExportDir);
+            }
+        }
+        if (!dirUri) {
+            const selectedDirs = await vscode.window.showOpenDialog({
+                canSelectFiles: false,
+                canSelectFolders: true,
+                canSelectMany: false,
+                defaultUri: lastExportDir
+                    ? vscode.Uri.file(lastExportDir)
+                    : vscode.workspace.workspaceFolders?.[0]?.uri,
+                title: "セッション統計データの保存先ディレクトリを選択",
+                openLabel: "このフォルダに保存",
+            });
+            if (!selectedDirs || selectedDirs.length === 0) {
+                return undefined;
+            }
+            dirUri = selectedDirs[0];
+            await context.globalState.update("lastSessionExportDir", dirUri.fsPath);
+        }
+    }
+    const durationMs = calculateSessionDurationMs(sessionData);
+    const durationText = formatDuration(durationMs);
+    const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    // 「ディレクトリとして保存」にチェックがある場合、YYYY-MM-DD-HHmmss のディレクトリを作成してその中に配置
+    let outputDirUri = dirUri;
+    if (createSubdirectory) {
+        outputDirUri = vscode.Uri.joinPath(dirUri, dateStr);
+        await vscode.workspace.fs.createDirectory(outputDirUri);
+    }
+    const savedFiles = [];
+    let primaryFileUri;
+    // A. セッション統計データ（session-stats-*.json）
+    if (saveStats) {
+        const fileName = `session-stats-${dateStr}.json`;
+        const fileUri = vscode.Uri.joinPath(outputDirUri, fileName);
+        const sessionNonConsecutive = Object.values(sessionAggregated.nonConsecutiveStats).reduce((sum, count) => sum + count, 0);
+        const sessionConsecutive = sessionTotal - sessionNonConsecutive;
+        const sessionRepeatRate = sessionTotal > 0
+            ? ((sessionConsecutive / sessionTotal) * 100).toFixed(1)
+            : "0.0";
+        const payload = {
+            version: 2,
+            type: "sessionStatistics",
+            exportedAt: new Date().toISOString(),
+            session: {
+                startedAt: sessionData.startedAt,
+                stoppedAt: sessionData.stoppedAt,
+                durationMs,
+                durationText,
+                initialKeybindingsCount: sessionData.initialKeybindingsCount,
+            },
+            summary: {
+                totalInputs: sessionTotal,
+                nonConsecutiveInputs: sessionNonConsecutive,
+                consecutiveInputs: sessionConsecutive,
+                repeatRate: `${sessionRepeatRate}%`,
+                extensionsCount: Object.keys(sessionData.statsByExt).length,
+            },
+            byExtension: sessionData.statsByExt,
+            totalStats: sessionAggregated.totalStats,
+            nonConsecutiveStats: sessionAggregated.nonConsecutiveStats,
+            keybindingsDiff: sessionData.keybindingsDiff,
+        };
+        const bytes = new TextEncoder().encode(JSON.stringify(payload, null, 2));
+        await vscode.workspace.fs.writeFile(fileUri, bytes);
+        savedFiles.push(fileName);
+        primaryFileUri = fileUri;
+    }
+    // B. キーバインド差分データ（session-diff-*.json）
+    if (sessionData.keybindingsDiff &&
+        sessionData.keybindingsDiff.diffs.length > 0) {
+        const diffFileName = `session-diff-${dateStr}.json`;
+        const diffFileUri = vscode.Uri.joinPath(outputDirUri, diffFileName);
+        const diffPayload = {
+            version: 2,
+            type: "sessionKeybindingsDiff",
+            calculatedAt: sessionData.keybindingsDiff.calculatedAt,
+            session: {
+                startedAt: sessionData.startedAt,
+                stoppedAt: sessionData.stoppedAt,
+                durationMs,
+            },
+            summary: {
+                initialKeybindingsCount: sessionData.keybindingsDiff.initialCount,
+                currentKeybindingsCount: sessionData.keybindingsDiff.currentCount,
+                addedCount: sessionData.keybindingsDiff.addedCount,
+                removedCount: sessionData.keybindingsDiff.removedCount,
+                modifiedCount: sessionData.keybindingsDiff.modifiedCount,
+                totalChanges: sessionData.keybindingsDiff.diffs.length,
+            },
+            diffs: sessionData.keybindingsDiff.diffs,
+        };
+        await vscode.workspace.fs.writeFile(diffFileUri, new TextEncoder().encode(JSON.stringify(diffPayload, null, 2)));
+        savedFiles.push(diffFileName);
+        if (!primaryFileUri) {
+            primaryFileUri = diffFileUri;
+        }
+    }
+    // C. 始めた時点でのキーバインド（ショートカット）データ（session-initial-keybindings-*.json）
+    if (saveInitialKeybindings) {
+        let kbItems = sessionData.initialKeybindings;
+        if (!kbItems || kbItems.length === 0) {
+            const currentKb = await readCurrentKeybindings();
+            kbItems = currentKb?.items;
+        }
+        if (kbItems && kbItems.length > 0) {
+            const kbFileName = `session-initial-keybindings-${dateStr}.json`;
+            const kbFileUri = vscode.Uri.joinPath(outputDirUri, kbFileName);
+            const kbBytes = new TextEncoder().encode(JSON.stringify(kbItems, null, 2));
+            await vscode.workspace.fs.writeFile(kbFileUri, kbBytes);
+            savedFiles.push(kbFileName);
+            if (!primaryFileUri) {
+                primaryFileUri = kbFileUri;
+            }
+        }
+    }
+    if (savedFiles.length > 0) {
+        const targetFolderDisplay = createSubdirectory
+            ? `${path.basename(dirUri.fsPath)}/${dateStr}`
+            : path.basename(dirUri.fsPath);
+        const action = await vscode.window.showInformationMessage(`[${targetFolderDisplay}] に保存しました (${savedFiles.length} 件): ${savedFiles.join(", ")}`, "ファイルを開く");
+        if (action === "ファイルを開く" && primaryFileUri) {
+            const doc = await vscode.workspace.openTextDocument(primaryFileUri);
+            await vscode.window.showTextDocument(doc);
+        }
+    }
+    return primaryFileUri;
+}
 function getActiveFileExtension() {
     const editor = vscode.window.activeTextEditor;
     if (!editor || !editor.document) {
@@ -225,6 +714,12 @@ function activate(context) {
             else if (message.command === "copySessionTsv") {
                 await vscode.commands.executeCommand("myTracker.copySessionTsv");
             }
+            else if (message.command === "copyKeybindingsDiffJson") {
+                await vscode.commands.executeCommand("myTracker.copyKeybindingsDiffJson");
+            }
+            else if (message.command === "exportSessionToDirectory") {
+                await vscode.commands.executeCommand("myTracker.exportSessionToDirectory");
+            }
         }, undefined, context.subscriptions);
         currentPanel.webview.html = await renderStatsHtml(context);
     });
@@ -342,12 +837,27 @@ function activate(context) {
             await refreshStatsPanel();
         }
     });
-    // 7. セッション計測開始コマンド
+    // 7. セッション計測開始コマンド（開始時キーバインド保存の質問付き）
     const startSession = vscode.commands.registerCommand("myTracker.startSession", async () => {
         const sessionData = getSessionData(context);
         if (sessionData.isActive) {
             vscode.window.showInformationMessage("セッション計測は既に実行中です。");
             return;
+        }
+        // 開始時のキーバインド保存についての質問
+        let snapshotSaved = false;
+        const askSnapshot = await vscode.window.showInformationMessage("セッション開始時のキーバインド設定をスナップショットとして保存しますか？（セッション終了時に変更差分を計算できるようになります）", "保存する", "保存しない");
+        if (askSnapshot === "保存する") {
+            const kbInfo = await readCurrentKeybindings();
+            if (kbInfo && kbInfo.items.length > 0) {
+                sessionData.initialKeybindings = kbInfo.items;
+                sessionData.initialKeybindingsCount = kbInfo.items.length;
+                sessionData.keybindingsDiff = undefined; // 新規セッション用に以前の差分をリセット
+                snapshotSaved = true;
+            }
+            else {
+                vscode.window.showWarningMessage("keybindings.json を読み込めなかったため、キーバインドのスナップショットは保存されませんでした。");
+            }
         }
         const now = new Date().toISOString();
         sessionData.isActive = true;
@@ -357,10 +867,15 @@ function activate(context) {
         sessionData.lastStartedAt = now;
         sessionData.stoppedAt = undefined;
         await context.globalState.update("sessionData", sessionData);
-        vscode.window.showInformationMessage("ショートカットセッション計測を開始しました。");
+        if (snapshotSaved && sessionData.initialKeybindingsCount) {
+            vscode.window.showInformationMessage(`開始時のキーバインド設定（${sessionData.initialKeybindingsCount.toLocaleString()} 件）を保存し、セッション計測を開始しました。`);
+        }
+        else {
+            vscode.window.showInformationMessage("ショートカットセッション計測を開始しました。");
+        }
         await refreshStatsPanel();
     });
-    // 8. セッション計測停止コマンド
+    // 8. セッション計測停止コマンド（キーバインド差分計算・ローカルディレクトリ保存の質問付き）
     const stopSession = vscode.commands.registerCommand("myTracker.stopSession", async () => {
         const sessionData = getSessionData(context);
         if (!sessionData.isActive) {
@@ -370,7 +885,8 @@ function activate(context) {
         const nowMs = Date.now();
         if (sessionData.lastStartedAt) {
             const startMs = new Date(sessionData.lastStartedAt).getTime();
-            sessionData.accumulatedMs = (sessionData.accumulatedMs || 0) + Math.max(0, nowMs - startMs);
+            sessionData.accumulatedMs =
+                (sessionData.accumulatedMs || 0) + Math.max(0, nowMs - startMs);
         }
         sessionData.isActive = false;
         sessionData.lastStartedAt = undefined;
@@ -378,15 +894,61 @@ function activate(context) {
         await context.globalState.update("sessionData", sessionData);
         vscode.window.showInformationMessage("ショートカットセッション計測を一時停止しました。");
         await refreshStatsPanel();
+        // 開始時のキーバインドスナップショットが存在する場合、差分計算と保存の質問を行う
+        if (sessionData.initialKeybindings &&
+            sessionData.initialKeybindings.length > 0) {
+            const askDiff = await vscode.window.showInformationMessage("セッション開始時からのキーバインド設定の差分を計算し、変更された部分を保存しますか？", "差分を計算して保存", "保存しない");
+            if (askDiff === "差分を計算して保存") {
+                const currentKb = await readCurrentKeybindings();
+                if (currentKb && currentKb.items) {
+                    const diff = calculateKeybindingsDiff(sessionData.initialKeybindings, currentKb.items);
+                    sessionData.keybindingsDiff = diff;
+                    await context.globalState.update("sessionData", sessionData);
+                    if (diff.diffs.length === 0) {
+                        vscode.window.showInformationMessage("セッション開始時からキーバインド設定の変更はありませんでした。");
+                    }
+                    else {
+                        // ワークスペースに差分ファイルを保存
+                        const savedUri = await saveDiffToFile(diff, sessionData);
+                        const msg = `キーバインドの変更差分を保存しました（追加: ${diff.addedCount}件, 削除: ${diff.removedCount}件, 変更: ${diff.modifiedCount}件）。`;
+                        let action;
+                        if (savedUri) {
+                            action = await vscode.window.showInformationMessage(msg, "差分ファイルを開く", "差分JSONをコピー");
+                        }
+                        else {
+                            action = await vscode.window.showInformationMessage(msg, "差分JSONをコピー");
+                        }
+                        if (action === "差分ファイルを開く" && savedUri) {
+                            const doc = await vscode.workspace.openTextDocument(savedUri);
+                            await vscode.window.showTextDocument(doc);
+                        }
+                        else if (action === "差分JSONをコピー") {
+                            await vscode.env.clipboard.writeText(JSON.stringify(diff, null, 2));
+                            vscode.window.showInformationMessage("差分データをクリップボードにコピーしました。");
+                        }
+                    }
+                    await refreshStatsPanel();
+                }
+                else {
+                    vscode.window.showErrorMessage("現在の keybindings.json を読み込めなかったため、差分を計算できませんでした。");
+                }
+            }
+        }
+        // セッション統計データのローカルディレクトリ保存についての質問・実行
+        // （チェックボックス付きQuickPickで「始めた時点のキーバインド」も同時に保存可能）
+        await exportSessionToDirectoryAction(context);
     });
     // 9. セッション計測リセットコマンド
     const resetSession = vscode.commands.registerCommand("myTracker.resetSession", async () => {
-        const confirm = await vscode.window.showWarningMessage("セッション計測データをリセットしますか？（メイン統計には影響しません）", { modal: true }, "リセット");
+        const confirm = await vscode.window.showWarningMessage("セッション計測データおよびキーバインドのスナップショット・差分をリセットしますか？（メイン統計には影響しません）", { modal: true }, "リセット");
         if (confirm === "リセット") {
             const freshSession = {
                 isActive: false,
                 accumulatedMs: 0,
                 statsByExt: {},
+                initialKeybindings: undefined,
+                initialKeybindingsCount: undefined,
+                keybindingsDiff: undefined,
             };
             await context.globalState.update("sessionData", freshSession);
             vscode.window.showInformationMessage("セッション計測データをリセットしました。");
@@ -405,6 +967,8 @@ function activate(context) {
                 startedAt: sessionData.startedAt,
                 stoppedAt: sessionData.stoppedAt,
                 durationMs,
+                initialKeybindingsCount: sessionData.initialKeybindingsCount,
+                keybindingsDiff: sessionData.keybindingsDiff,
             },
         };
         const jsonStr = JSON.stringify(payload, null, 2);
@@ -416,7 +980,21 @@ function activate(context) {
         const sessionData = getSessionData(context);
         await copyTsvAction(context, sessionData.statsByExt, "セッション統計");
     });
-    context.subscriptions.push(trackAndRun, showStats, copyStatsTsv, copyStatsJson, importStatsJson, resetStats, startSession, stopSession, resetSession, copySessionJson, copySessionTsv);
+    // 12. キーバインド差分JSONのコピーコマンド
+    const copyKeybindingsDiffJson = vscode.commands.registerCommand("myTracker.copyKeybindingsDiffJson", async () => {
+        const sessionData = getSessionData(context);
+        if (!sessionData.keybindingsDiff) {
+            vscode.window.showInformationMessage("保存されたキーバインド差分データがありません。");
+            return;
+        }
+        await vscode.env.clipboard.writeText(JSON.stringify(sessionData.keybindingsDiff, null, 2));
+        vscode.window.showInformationMessage("キーバインド差分データをクリップボードにコピーしました。");
+    });
+    // 13. セッション統計データをディレクトリに保存するコマンド
+    const exportSessionToDirectory = vscode.commands.registerCommand("myTracker.exportSessionToDirectory", async () => {
+        await exportSessionToDirectoryAction(context);
+    });
+    context.subscriptions.push(trackAndRun, showStats, copyStatsTsv, copyStatsJson, importStatsJson, resetStats, startSession, stopSession, resetSession, copySessionJson, copySessionTsv, copyKeybindingsDiffJson, exportSessionToDirectory);
 }
 function deactivate() { }
 function escapeHtml(text) {
@@ -515,6 +1093,68 @@ async function renderStatsHtml(context) {
     const sessionToggleBtn = sessionData.isActive
         ? '<button class="action-btn" onclick="stopSession()">⏸ 計測を一時停止</button>'
         : '<button class="action-btn primary-btn" onclick="startSession()">▶ 計測を開始</button>';
+    const sessionSnapshotInfo = sessionData.initialKeybindingsCount
+        ? `保存済み (${sessionData.initialKeybindingsCount.toLocaleString()} 件)`
+        : "未保存";
+    // キーバインド差分の表示生成
+    let keybindingsDiffHtml = "";
+    if (sessionData.keybindingsDiff) {
+        const diff = sessionData.keybindingsDiff;
+        if (diff.diffs.length === 0) {
+            keybindingsDiffHtml = `
+        <div class="diff-container empty-diff">
+          <span>キーバインドの変更差分はありませんでした（開始時と同一）。</span>
+        </div>`;
+        }
+        else {
+            const diffRows = diff.diffs
+                .map((entry) => {
+                let badgeClass = "diff-badge-added";
+                let badgeText = "追加";
+                if (entry.type === "removed") {
+                    badgeClass = "diff-badge-removed";
+                    badgeText = "削除";
+                }
+                else if (entry.type === "modified") {
+                    badgeClass = "diff-badge-modified";
+                    badgeText = "変更";
+                }
+                let detailText = `コマンド: <code>${escapeHtml(entry.command)}</code>`;
+                if (entry.when) {
+                    detailText += ` <span class="sub">(when: ${escapeHtml(entry.when)})</span>`;
+                }
+                if (entry.before) {
+                    detailText += `<div class="sub" style="margin-top: 2px;">変更前: <code>${escapeHtml(entry.before.command)}</code> ${entry.before.when ? `(when: ${escapeHtml(entry.before.when)})` : ""}</div>`;
+                }
+                return `
+            <tr>
+              <td style="width: 70px;"><span class="diff-badge ${badgeClass}">${badgeText}</span></td>
+              <td class="key-col"><code>${escapeHtml(entry.key)}</code></td>
+              <td>${detailText}</td>
+            </tr>`;
+            })
+                .join("");
+            keybindingsDiffHtml = `
+        <div class="diff-container">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h4 style="margin: 0; font-size: 13px;">🔑 キーバインドの変更差分 (計 ${diff.diffs.length} 件: 追加 +${diff.addedCount} / 削除 -${diff.removedCount} / 変更 ~${diff.modifiedCount})</h4>
+            <button class="action-btn" onclick="copyKeybindingsDiffJson()" style="font-size: 11px; padding: 3px 8px;">📋 差分JSONコピー</button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>種別</th>
+                <th>キー</th>
+                <th>詳細</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${diffRows}
+            </tbody>
+          </table>
+        </div>`;
+        }
+    }
     const sessionAllKeys = Array.from(new Set([
         ...Object.keys(sessionAggregated.totalStats),
         ...Object.keys(sessionAggregated.nonConsecutiveStats),
@@ -565,6 +1205,8 @@ async function renderStatsHtml(context) {
         .replace("{{SESSION_TOGGLE_BTN}}", sessionToggleBtn)
         .replace("{{SESSION_STARTED_AT}}", sessionStartedAtText)
         .replace("{{SESSION_DURATION}}", sessionDurationText)
+        .replace("{{SESSION_SNAPSHOT_INFO}}", sessionSnapshotInfo)
+        .replace("{{KEYBINDINGS_DIFF_SECTION}}", keybindingsDiffHtml)
         .replace("{{SESSION_TOTAL_INPUTS}}", sessionTotal.toLocaleString())
         .replace("{{SESSION_NON_CONSECUTIVE}}", sessionNonConsecutive.toLocaleString())
         .replace("{{SESSION_REPEAT_RATE}}", sessionRepeatRate)

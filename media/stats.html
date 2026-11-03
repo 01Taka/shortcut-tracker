@@ -318,6 +318,42 @@
     .action-btn.primary-btn:hover {
       background: var(--vscode-button-hoverBackground);
     }
+    .diff-container {
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border, #444);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+    }
+    .empty-diff {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      text-align: center;
+      padding: 10px;
+    }
+    .diff-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .diff-badge-added {
+      background: rgba(78, 201, 176, 0.2);
+      color: #4ec9b0;
+      border: 1px solid rgba(78, 201, 176, 0.4);
+    }
+    .diff-badge-removed {
+      background: rgba(244, 135, 113, 0.2);
+      color: #f48771;
+      border: 1px solid rgba(244, 135, 113, 0.4);
+    }
+    .diff-badge-modified {
+      background: rgba(220, 160, 40, 0.2);
+      color: #dcdcaa;
+      border: 1px solid rgba(220, 160, 40, 0.4);
+    }
   </style>
 </head>
 <body>
@@ -435,6 +471,7 @@
         <div class="session-controls">
           {{SESSION_TOGGLE_BTN}}
           <button class="action-btn danger-btn" onclick="resetSession()">🔄 リセット</button>
+          <button class="action-btn" onclick="exportSessionToDirectory()">💾 フォルダに保存</button>
           <button class="action-btn" onclick="copySessionTsv()">📊 TSVコピー</button>
           <button class="action-btn" onclick="copySessionJson()">📋 JSONコピー</button>
         </div>
@@ -460,8 +497,14 @@
           <span class="session-stat-label">連続リピート率</span>
           <span class="session-stat-value">{{SESSION_REPEAT_RATE}}%</span>
         </div>
+        <div class="session-stat-item">
+          <span class="session-stat-label">キーバインド設定</span>
+          <span class="session-stat-value" style="font-size: 13px;">{{SESSION_SNAPSHOT_INFO}}</span>
+        </div>
       </div>
     </div>
+
+    {{KEYBINDINGS_DIFF_SECTION}}
 
     <table>
       <thead>
@@ -526,6 +569,14 @@
 
     function copySessionJson() {
       vscode.postMessage({ command: 'copySessionJson' });
+    }
+
+    function exportSessionToDirectory() {
+      vscode.postMessage({ command: 'exportSessionToDirectory' });
+    }
+
+    function copyKeybindingsDiffJson() {
+      vscode.postMessage({ command: 'copyKeybindingsDiffJson' });
     }
 
     function showTab(tabId, btn) {

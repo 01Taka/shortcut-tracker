@@ -54,6 +54,14 @@
       {
         "command": "myTracker.copySessionTsv",
         "title": "ShortcutStatus Copy Session Statistics as TSV"
+      },
+      {
+        "command": "myTracker.copyKeybindingsDiffJson",
+        "title": "ShortcutStatus Copy Keybindings Diff as JSON"
+      },
+      {
+        "command": "myTracker.exportSessionToDirectory",
+        "title": "ShortcutStatus Export Session Statistics to Local Directory"
       }
     ]
   },
