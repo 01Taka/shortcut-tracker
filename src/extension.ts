@@ -1,9 +1,104 @@
+import * as path from "path";
 import * as vscode from "vscode";
 
 interface TrackArgs {
   keyName: string;
   command: string;
   commandArgs?: any;
+}
+
+export interface ExtensionStats {
+  shortcutStats: Record<string, number>;
+  shortcutStatsNonConsecutive: Record<string, number>;
+}
+
+export type StatsByExtension = Record<string, ExtensionStats>;
+
+export interface ExportDataV2 {
+  version: 2;
+  exportedAt: string;
+  byExtension: StatsByExtension;
+}
+
+function getActiveFileExtension(): string {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || !editor.document) {
+    return "(none)";
+  }
+
+  const fileName = editor.document.fileName;
+  const ext = path.extname(fileName).toLowerCase();
+  if (ext) {
+    return ext;
+  }
+
+  // 拡張子がないファイル（Dockerfile, Makefile等）や未保存ファイル
+  if (editor.document.languageId) {
+    return editor.document.languageId.toLowerCase();
+  }
+
+  return "(no-ext)";
+}
+
+function getStatsByExt(context: vscode.ExtensionContext): StatsByExtension {
+  let statsByExt = context.globalState.get<StatsByExtension>("shortcutStatsByExt");
+
+  if (!statsByExt || typeof statsByExt !== "object") {
+    statsByExt = {};
+    // 旧データ（shortcutStats, shortcutStatsNonConsecutive）が存在するか確認し、(legacy) にマイグレーション
+    const oldTotal = context.globalState.get<Record<string, number>>("shortcutStats");
+    const oldNonConsecutive = context.globalState.get<Record<string, number>>(
+      "shortcutStatsNonConsecutive",
+    );
+
+    if (oldTotal && Object.keys(oldTotal).length > 0) {
+      statsByExt["(legacy)"] = {
+        shortcutStats: { ...oldTotal },
+        shortcutStatsNonConsecutive: {
+          ...(oldNonConsecutive || oldTotal),
+        },
+      };
+      // バックグラウンドで新形式に移行保存
+      context.globalState.update("shortcutStatsByExt", statsByExt);
+    }
+  }
+
+  return statsByExt;
+}
+
+function aggregateStats(
+  statsByExt: StatsByExtension,
+  filterExtensions?: string[],
+): {
+  totalStats: Record<string, number>;
+  nonConsecutiveStats: Record<string, number>;
+} {
+  const totalStats: Record<string, number> = {};
+  const nonConsecutiveStats: Record<string, number> = {};
+
+  const targetExts = filterExtensions
+    ? Object.keys(statsByExt).filter((ext) => filterExtensions.includes(ext))
+    : Object.keys(statsByExt);
+
+  for (const ext of targetExts) {
+    const data = statsByExt[ext];
+    if (!data) {
+      continue;
+    }
+
+    if (data.shortcutStats) {
+      for (const [key, count] of Object.entries(data.shortcutStats)) {
+        totalStats[key] = (totalStats[key] || 0) + count;
+      }
+    }
+    if (data.shortcutStatsNonConsecutive) {
+      for (const [key, count] of Object.entries(data.shortcutStatsNonConsecutive)) {
+        nonConsecutiveStats[key] = (nonConsecutiveStats[key] || 0) + count;
+      }
+    }
+  }
+
+  return { totalStats, nonConsecutiveStats };
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -23,36 +118,32 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      // 直前の入力キーを取得して連続入力を判定
+      // 操作中ファイルの拡張子を取得
+      const ext = getActiveFileExtension();
+
+      // 直前の入力キーを取得して連続入力を判定（全体ストリームで判定）
       const lastKey: string | undefined = context.globalState.get("lastTrackedKey");
       const isConsecutive = lastKey === args.keyName;
 
-      // 1. 現行の統計（すべての入力をカウント）
-      const totalStats: Record<string, number> = context.globalState.get(
-        "shortcutStats",
-        {},
-      );
-      totalStats[args.keyName] = (totalStats[args.keyName] || 0) + 1;
-
-      // 2. 連続した入力をカウントしない統計（直前と異なる場合のみカウント）
-      const nonConsecutiveStats: Record<string, number> = context.globalState.get(
-        "shortcutStatsNonConsecutive",
-        {},
-      );
-      if (!isConsecutive) {
-        nonConsecutiveStats[args.keyName] =
-          (nonConsecutiveStats[args.keyName] || 0) + 1;
+      const statsByExt = getStatsByExt(context);
+      if (!statsByExt[ext]) {
+        statsByExt[ext] = {
+          shortcutStats: {},
+          shortcutStatsNonConsecutive: {},
+        };
       }
 
-      // 状態を永続保存（直前の入力キーも保存）
+      statsByExt[ext].shortcutStats[args.keyName] =
+        (statsByExt[ext].shortcutStats[args.keyName] || 0) + 1;
+
+      if (!isConsecutive) {
+        statsByExt[ext].shortcutStatsNonConsecutive[args.keyName] =
+          (statsByExt[ext].shortcutStatsNonConsecutive[args.keyName] || 0) + 1;
+      }
+
+      // 状態を永続保存
       await Promise.all([
-        context.globalState.update("shortcutStats", totalStats),
-        !isConsecutive
-          ? context.globalState.update(
-              "shortcutStatsNonConsecutive",
-              nonConsecutiveStats,
-            )
-          : Promise.resolve(),
+        context.globalState.update("shortcutStatsByExt", statsByExt),
         context.globalState.update("lastTrackedKey", args.keyName),
       ]);
 
@@ -132,34 +223,27 @@ export function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  // 4. 統計データをJSON形式でコピーするコマンド
+  // 4. 統計データをJSON形式（拡張子別 version: 2）でコピーするコマンド
   const copyStatsJson = vscode.commands.registerCommand(
     "myTracker.copyStatsJson",
     async () => {
-      const totalStats = context.globalState.get<Record<string, number>>(
-        "shortcutStats",
-        {},
-      );
-      const nonConsecutiveStats = context.globalState.get<
-        Record<string, number>
-      >("shortcutStatsNonConsecutive", {});
+      const statsByExt = getStatsByExt(context);
 
-      const payload = {
-        version: 1,
+      const payload: ExportDataV2 = {
+        version: 2,
         exportedAt: new Date().toISOString(),
-        shortcutStats: totalStats,
-        shortcutStatsNonConsecutive: nonConsecutiveStats,
+        byExtension: statsByExt,
       };
 
       const jsonStr = JSON.stringify(payload, null, 2);
       await vscode.env.clipboard.writeText(jsonStr);
       vscode.window.showInformationMessage(
-        "ショートカット統計データをJSON形式でクリップボードにコピーしました。",
+        "ショートカット統計データを拡張子別JSON形式でクリップボードにコピーしました。",
       );
     },
   );
 
-  // 4. 統計データをJSON形式でインポートして現在の統計と合計するコマンド
+  // 5. 統計データをJSON形式でインポートして現在の統計と合計するコマンド
   const importStatsJson = vscode.commands.registerCommand(
     "myTracker.importStatsJson",
     async () => {
@@ -167,7 +251,7 @@ export function activate(context: vscode.ExtensionContext) {
         prompt:
           "インポートする統計データ（JSON）を入力してください（現在の統計と合算されます）",
         placeHolder:
-          '{"shortcutStats": {...}, "shortcutStatsNonConsecutive": {...}}',
+          '{"version": 2, "byExtension": { ".ts": { "shortcutStats": {...} } }}',
         ignoreFocusOut: true,
       });
 
@@ -185,54 +269,75 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      let importedTotal: Record<string, any> = {};
-      let importedNonConsecutive: Record<string, any> = {};
-
-      if (parsed && typeof parsed === "object") {
-        if (parsed.shortcutStats && typeof parsed.shortcutStats === "object") {
-          importedTotal = parsed.shortcutStats;
-          importedNonConsecutive =
-            parsed.shortcutStatsNonConsecutive &&
-            typeof parsed.shortcutStatsNonConsecutive === "object"
-              ? parsed.shortcutStatsNonConsecutive
-              : parsed.shortcutStats;
-        } else {
-          // フラットなキーバインド辞書形式
-          importedTotal = parsed;
-          importedNonConsecutive = parsed;
-        }
-      } else {
+      if (!parsed || typeof parsed !== "object") {
         vscode.window.showErrorMessage("統計データの形式が不正です。");
         return;
       }
 
-      const currentTotal: Record<string, number> = context.globalState.get(
-        "shortcutStats",
-        {},
-      );
-      const currentNonConsecutive: Record<string, number> =
-        context.globalState.get("shortcutStatsNonConsecutive", {});
+      const statsByExt = getStatsByExt(context);
 
       let addedTotalCount = 0;
       let addedKeysCount = 0;
 
-      for (const [key, val] of Object.entries(importedTotal)) {
-        const num = Number(val);
-        if (!isNaN(num) && num > 0) {
-          const count = Math.round(num);
-          currentTotal[key] = (currentTotal[key] || 0) + count;
-          addedTotalCount += count;
-          addedKeysCount++;
+      // ヘルパー：特定拡張子のデータに統計を加算
+      const mergeExtensionStats = (
+        extName: string,
+        importedTotal: Record<string, any>,
+        importedNonConsecutive: Record<string, any>,
+      ) => {
+        if (!statsByExt[extName]) {
+          statsByExt[extName] = {
+            shortcutStats: {},
+            shortcutStatsNonConsecutive: {},
+          };
         }
-      }
 
-      for (const [key, val] of Object.entries(importedNonConsecutive)) {
-        const num = Number(val);
-        if (!isNaN(num) && num > 0) {
-          const count = Math.round(num);
-          currentNonConsecutive[key] =
-            (currentNonConsecutive[key] || 0) + count;
+        for (const [key, val] of Object.entries(importedTotal || {})) {
+          const num = Number(val);
+          if (!isNaN(num) && num > 0) {
+            const count = Math.round(num);
+            statsByExt[extName].shortcutStats[key] =
+              (statsByExt[extName].shortcutStats[key] || 0) + count;
+            addedTotalCount += count;
+            addedKeysCount++;
+          }
         }
+
+        for (const [key, val] of Object.entries(importedNonConsecutive || {})) {
+          const num = Number(val);
+          if (!isNaN(num) && num > 0) {
+            const count = Math.round(num);
+            statsByExt[extName].shortcutStatsNonConsecutive[key] =
+              (statsByExt[extName].shortcutStatsNonConsecutive[key] || 0) + count;
+          }
+        }
+      };
+
+      if (parsed.byExtension && typeof parsed.byExtension === "object") {
+        // version: 2 形式
+        for (const [ext, extData] of Object.entries<any>(parsed.byExtension)) {
+          if (extData && typeof extData === "object") {
+            const rawTotal = extData.shortcutStats || {};
+            const rawNonConsecutive =
+              extData.shortcutStatsNonConsecutive || rawTotal;
+            mergeExtensionStats(ext, rawTotal, rawNonConsecutive);
+          }
+        }
+      } else if (
+        parsed.shortcutStats &&
+        typeof parsed.shortcutStats === "object"
+      ) {
+        // version: 1 形式（shortcutStats, shortcutStatsNonConsecutive を直下に持つ）
+        const rawTotal = parsed.shortcutStats;
+        const rawNonConsecutive =
+          parsed.shortcutStatsNonConsecutive &&
+          typeof parsed.shortcutStatsNonConsecutive === "object"
+            ? parsed.shortcutStatsNonConsecutive
+            : parsed.shortcutStats;
+        mergeExtensionStats("(legacy)", rawTotal, rawNonConsecutive);
+      } else {
+        // フラットなキーバインド辞書形式
+        mergeExtensionStats("(legacy)", parsed, parsed);
       }
 
       if (addedKeysCount === 0) {
@@ -242,13 +347,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      await Promise.all([
-        context.globalState.update("shortcutStats", currentTotal),
-        context.globalState.update(
-          "shortcutStatsNonConsecutive",
-          currentNonConsecutive,
-        ),
-      ]);
+      await context.globalState.update("shortcutStatsByExt", statsByExt);
 
       vscode.window.showInformationMessage(
         `統計データをインポートしました（${addedKeysCount} 個のキー、計 ${addedTotalCount.toLocaleString()} 回を加算）。`,
@@ -258,7 +357,7 @@ export function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  // 5. 統計のリセットコマンド
+  // 6. 統計のリセットコマンド
   const resetStats = vscode.commands.registerCommand(
     "myTracker.resetStats",
     async () => {
@@ -269,8 +368,9 @@ export function activate(context: vscode.ExtensionContext) {
       );
       if (confirm === "リセット") {
         await Promise.all([
-          context.globalState.update("shortcutStats", {}),
-          context.globalState.update("shortcutStatsNonConsecutive", {}),
+          context.globalState.update("shortcutStatsByExt", {}),
+          context.globalState.update("shortcutStats", undefined),
+          context.globalState.update("shortcutStatsNonConsecutive", undefined),
           context.globalState.update("lastTrackedKey", undefined),
         ]);
         vscode.window.showInformationMessage(
@@ -305,14 +405,8 @@ function escapeHtml(text: string): string {
 async function renderStatsHtml(
   context: vscode.ExtensionContext,
 ): Promise<string> {
-  const totalStats: Record<string, number> = context.globalState.get(
-    "shortcutStats",
-    {},
-  );
-  const nonConsecutiveStats: Record<string, number> = context.globalState.get(
-    "shortcutStatsNonConsecutive",
-    {},
-  );
+  const statsByExt = getStatsByExt(context);
+  const { totalStats, nonConsecutiveStats } = aggregateStats(statsByExt);
   const lastKey: string | undefined = context.globalState.get("lastTrackedKey");
 
   // キーの全集合
@@ -456,15 +550,45 @@ async function copyTsvAction(
   context: vscode.ExtensionContext,
   targetType?: "raw" | "dedup" | "all",
 ) {
-  const totalStats = context.globalState.get<Record<string, number>>(
-    "shortcutStats",
-    {},
-  );
-  const nonConsecutiveStats = context.globalState.get<Record<string, number>>(
-    "shortcutStatsNonConsecutive",
-    {},
+  const statsByExt = getStatsByExt(context);
+  const availableExts = Object.keys(statsByExt);
+
+  if (availableExts.length === 0) {
+    vscode.window.showInformationMessage("コピー対象の統計データがありません。");
+    return;
+  }
+
+  // 1. 対象の拡張子をマルチ選択
+  const extPickItems = availableExts.map((ext) => {
+    const data = statsByExt[ext];
+    const count = Object.values(data.shortcutStats || {}).reduce(
+      (sum, c) => sum + c,
+      0,
+    );
+    return {
+      label: ext,
+      description: `${count.toLocaleString()} 回の入力`,
+      picked: true, // デフォルトで全選択
+    };
+  });
+
+  const selectedItems = await vscode.window.showQuickPick(extPickItems, {
+    canPickMany: true,
+    placeHolder: "TSV出力に含める拡張子を選択してください（Enterで決定）",
+    title: "拡張子の選択",
+  });
+
+  if (!selectedItems || selectedItems.length === 0) {
+    return;
+  }
+
+  const selectedExts = selectedItems.map((item) => item.label);
+  const { totalStats, nonConsecutiveStats } = aggregateStats(
+    statsByExt,
+    selectedExts,
   );
 
+  // 2. 統計の集計種類を選択（指定されていない場合）
   let selectedType = targetType;
   if (!selectedType) {
     const choice = await vscode.window.showQuickPick(
@@ -497,21 +621,26 @@ async function copyTsvAction(
   }
 
   let tsv = "";
-  let label = "";
+  let typeLabel = "";
 
   if (selectedType === "raw") {
     tsv = formatTsv(totalStats);
-    label = "現行の統計 (全入力)";
+    typeLabel = "現行の統計 (全入力)";
   } else if (selectedType === "dedup") {
     tsv = formatTsv(nonConsecutiveStats);
-    label = "連続除外統計 (非連続)";
+    typeLabel = "連続除外統計 (非連続)";
   } else {
     tsv = `【現行の統計 (全入力)】\n${formatTsv(totalStats)}\n\n【連続除外統計 (非連続)】\n${formatTsv(nonConsecutiveStats)}`;
-    label = "統計データ (全入力 & 連続除外)";
+    typeLabel = "統計データ (全入力 & 連続除外)";
   }
+
+  const extsLabel =
+    selectedExts.length === availableExts.length
+      ? "全拡張子"
+      : selectedExts.join(", ");
 
   await vscode.env.clipboard.writeText(tsv);
   vscode.window.showInformationMessage(
-    `${label} をTSV形式（キー 回数 パーセント）でクリップボードにコピーしました。`,
+    `[${extsLabel}] ${typeLabel} をTSV形式（キー 回数 パーセント）でクリップボードにコピーしました。`,
   );
 }
