@@ -532,6 +532,64 @@
     "command": "workbench.action.showCommands"
   },
   {
+    "key": "alt+f alt+j",
+    "command": "workbench.action.focusActiveEditorGroup",
+    "when": "panelFocus"
+  },
+  {
+    "key": "alt+f alt+j",
+    "command": "workbench.action.focusPanel",
+    "when": "!panelFocus"
+  },
+  {
+    "key": "shift+alt+f shift+alt+j",
+    "command": "workbench.action.togglePanel"
+  },
+  {
+    "key": "alt+f alt+e",
+    "command": "workbench.action.toggleSidebarVisibility",
+    "when": "sideBarFocus && activeViewlet == 'workbench.view.explorer'"
+  },
+  {
+    "key": "alt+f alt+e",
+    "command": "workbench.view.explorer",
+    "when": "!sideBarFocus || activeViewlet != 'workbench.view.explorer'"
+  },
+  {
+    "key": "alt+f alt+g",
+    "command": "workbench.action.toggleSidebarVisibility",
+    "when": "sideBarFocus && activeViewlet == 'workbench.view.scm' && inputFocus"
+  },
+  {
+    "key": "alt+f alt+g",
+    "command": "workbench.scm.action.focusNextInput",
+    "when": "sideBarFocus && activeViewlet == 'workbench.view.scm' && !inputFocus"
+  },
+  {
+    "key": "alt+f alt+g",
+    "command": "workbench.view.scm",
+    "when": "!sideBarFocus || activeViewlet != 'workbench.view.scm'"
+  },
+  {
+    "key": "alt+f alt+s",
+    "command": "workbench.action.toggleSidebarVisibility",
+    "when": "sideBarFocus && activeViewlet == 'workbench.view.search' && inputFocus"
+  },
+  {
+    "key": "alt+f alt+s",
+    "command": "workbench.action.findInFiles",
+    "when": "!sideBarFocus || activeViewlet != 'workbench.view.search' || !inputFocus"
+  },
+  {
+    "key": "shift+alt+f shift+alt+s",
+    "command": "workbench.action.toggleSidebarVisibility",
+    "when": "sideBarFocus && activeViewlet == 'workbench.view.search' && inputFocus"
+  },
+  {
+    "key": "shift+alt+f shift+alt+b",
+    "command": "workbench.action.toggleAuxiliaryBar"
+  },
+  {
     "key": "alt+n",
     "command": "explorer.newFile",
     "when": "filesExplorerFocus && foldersViewVisible && !inputFocus"
