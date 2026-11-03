@@ -22,6 +22,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new StatsStore(context);
   activeStore = store;
 
+  // 起動完了後の次ティックで、前回計測中だったセッションの再開時刻補正を非同期で行う（activate自体は0msで完了）
+  setImmediate(() => {
+    store.initializeBackgroundSessionState();
+  });
+
   let actionsModulePromise:
     | Promise<typeof import("./commands/actions")>
     | undefined;
@@ -101,5 +106,5 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): Promise<void> | undefined {
-  return activeStore?.flush();
+  return activeStore?.shutdown();
 }

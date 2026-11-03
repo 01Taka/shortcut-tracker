@@ -11,7 +11,9 @@ export function calculateSessionDurationMs(sessionData: SessionData): number {
   let totalMs = sessionData.accumulatedMs || 0;
   if (sessionData.isActive && sessionData.lastStartedAt) {
     const startMs = new Date(sessionData.lastStartedAt).getTime();
-    totalMs += Math.max(0, Date.now() - startMs);
+    if (!isNaN(startMs)) {
+      totalMs += Math.max(0, Date.now() - startMs);
+    }
   }
   return totalMs;
 }
@@ -36,6 +38,32 @@ export function formatDuration(ms: number): string {
     parts.push(`${seconds}秒`);
   }
   return parts.join(" ");
+}
+
+/**
+ * ローカルタイムゾーン（JST等）基準のタイムスタンプ文字列 (YYYY-MM-DD_HHmmss)
+ */
+export function formatLocalTimestamp(date: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const yyyy = date.getFullYear();
+  const mm = pad(date.getMonth() + 1);
+  const dd = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const min = pad(date.getMinutes());
+  const ss = pad(date.getSeconds());
+  return `${yyyy}-${mm}-${dd}_${hh}${min}${ss}`;
+}
+
+/**
+ * ファイル名・ディレクトリ名に使用できない文字を安全な文字へ置換
+ */
+export function sanitizeFileSegment(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")
+    .replace(/\s+/g, "-")
+    .replace(/\.+$/g, "")
+    .slice(0, 60);
 }
 
 export function aggregateStats(
@@ -65,7 +93,9 @@ export function aggregateStats(
       }
     }
     if (data.shortcutStatsNonConsecutive) {
-      for (const [key, count] of Object.entries(data.shortcutStatsNonConsecutive)) {
+      for (const [key, count] of Object.entries(
+        data.shortcutStatsNonConsecutive,
+      )) {
         nonConsecutiveStats[key] = (nonConsecutiveStats[key] || 0) + count;
         totalNonConsecutive += count;
       }
@@ -101,6 +131,49 @@ export function formatTsv(stats: Record<string, number>): string {
   }
 
   return rows.join("\n");
+}
+
+/**
+ * AI分析向けの6列統合TSVフォーマットを生成
+ */
+export function formatUnifiedTsv(aggregated: AggregatedStats): string {
+  const header = "キー\t全入力\t全入力%\t非連続\t非連続%\tリピート率";
+  const allKeys = Array.from(
+    new Set([
+      ...Object.keys(aggregated.totalStats),
+      ...Object.keys(aggregated.nonConsecutiveStats),
+    ]),
+  );
+  if (allKeys.length === 0) {
+    return header;
+  }
+
+  allKeys.sort(
+    (a, b) =>
+      (aggregated.totalStats[b] || 0) - (aggregated.totalStats[a] || 0) ||
+      a.localeCompare(b),
+  );
+
+  const { totalInputs, totalNonConsecutive } = aggregated;
+  const lines = new Array<string>(allKeys.length + 1);
+  lines[0] = header;
+
+  for (let i = 0; i < allKeys.length; i++) {
+    const key = allKeys[i];
+    const total = aggregated.totalStats[key] || 0;
+    const nonConsec = aggregated.nonConsecutiveStats[key] || 0;
+    const tPct =
+      totalInputs > 0 ? ((total / totalInputs) * 100).toFixed(1) : "0.0";
+    const ncPct =
+      totalNonConsecutive > 0
+        ? ((nonConsec / totalNonConsecutive) * 100).toFixed(1)
+        : "0.0";
+    const repRate =
+      total > 0 ? (((total - nonConsec) / total) * 100).toFixed(1) : "0.0";
+    lines[i + 1] = `${key}\t${total}\t${tPct}%\t${nonConsec}\t${ncPct}%\t${repRate}%`;
+  }
+
+  return lines.join("\n");
 }
 
 const HTML_ESCAPE_MAP: Record<string, string> = {

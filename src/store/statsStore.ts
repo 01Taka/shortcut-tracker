@@ -6,6 +6,10 @@ import type { SessionData, StatsByExtension } from "../types";
  * 連続打鍵時の globalState 書き込み（IPC・SQLiteシリアライズ）を間引く間隔 (ms)
  */
 const FLUSH_INTERVAL_MS = 1500;
+/**
+ * 異常終了時に閉じていた時間が加算されるのを防ぐためのハートビート間隔 (ms)
+ */
+const SESSION_HEARTBEAT_INTERVAL_MS = 60_000;
 const INITIAL_KEYBINDINGS_FILENAME = "session-initial-keybindings.json";
 
 interface DocExtCacheEntry {
@@ -18,7 +22,7 @@ interface DocExtCacheEntry {
  * インメモリキャッシュと遅延バッチ保存を備えた統計ストア
  * - activate() 時はファイルI/Oや重い初期化を一切行わない
  * - キー入力時はメモリ上の O(1) 加算のみを同期実行し、本来のコマンド実行をブロックしない
- * - 巨大な initialKeybindings は globalState から globalStorageUri 配下のファイルへオフロード
+ * - セッション計測中に VS Code を閉じた場合、閉じていた時間を除外して次回起動時に自動再開する
  */
 export class StatsStore {
   private loaded = false;
@@ -39,6 +43,7 @@ export class StatsStore {
   private dirtyLastKey = false;
   private dirtySession = false;
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
+  private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   private activeFlushPromise: Promise<void> = Promise.resolve();
 
   private readonly docExtCache = new WeakMap<
@@ -70,6 +75,13 @@ export class StatsStore {
         console.error("StatsStore change listener error", error);
       }
     }
+  }
+
+  /**
+   * 起動直後の次ティックで呼び出し、前回「計測中」のまま終了していたセッションの再開時刻を補正する
+   */
+  public initializeBackgroundSessionState(): void {
+    this.ensureLoaded();
   }
 
   private ensureLoaded(): void {
@@ -121,7 +133,7 @@ export class StatsStore {
         };
         void this.migrateLegacyInitialKeybindings(legacyKb);
       } else {
-        this.sessionData = rawSession;
+        this.sessionData = { ...rawSession };
       }
     } else {
       this.sessionData = {
@@ -131,8 +143,47 @@ export class StatsStore {
       };
     }
 
-    if (this.dirtyStats) {
+    // 前回セッションが「計測中」のまま終了していた場合、閉じていた時間を除外して今回の起動時刻から自動再開する
+    if (this.sessionData.isActive) {
+      const nowIso = new Date().toISOString();
+      if (this.sessionData.lastStartedAt) {
+        // deactivate() を経ずに異常終了していた場合は、最終ハートビートまでの時間のみ加算して閉鎖時間を除外
+        const startMs = new Date(this.sessionData.lastStartedAt).getTime();
+        const hbMs = this.sessionData.lastHeartbeatAt
+          ? new Date(this.sessionData.lastHeartbeatAt).getTime()
+          : startMs;
+        if (!isNaN(startMs) && !isNaN(hbMs) && hbMs > startMs) {
+          this.sessionData.accumulatedMs =
+            (this.sessionData.accumulatedMs || 0) + (hbMs - startMs);
+        }
+      }
+      this.sessionData.lastStartedAt = nowIso;
+      this.sessionData.lastHeartbeatAt = nowIso;
+      this.dirtySession = true;
+    }
+
+    this.syncHeartbeatTimer();
+
+    if (this.dirtyStats || this.dirtySession) {
       this.scheduleFlush();
+    }
+  }
+
+  private syncHeartbeatTimer(): void {
+    if (this.sessionData.isActive) {
+      if (this.heartbeatTimer === undefined) {
+        this.heartbeatTimer = setInterval(() => {
+          if (!this.sessionData.isActive) {
+            return;
+          }
+          this.sessionData.lastHeartbeatAt = new Date().toISOString();
+          this.dirtySession = true;
+          this.scheduleFlush();
+        }, SESSION_HEARTBEAT_INTERVAL_MS);
+      }
+    } else if (this.heartbeatTimer !== undefined) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
     }
   }
 
@@ -167,7 +218,6 @@ export class StatsStore {
     }
 
     const rawExt = path.extname(fileName).toLowerCase();
-    // 拡張子がないファイル（Dockerfile, Makefile等）や未保存ファイルは languageId を使用
     const ext = rawExt || (languageId ? languageId.toLowerCase() : "(no-ext)");
     this.docExtCache.set(doc, { fileName, languageId, ext });
     return ext;
@@ -217,6 +267,7 @@ export class StatsStore {
         sessionExt.shortcutStatsNonConsecutive[keyName] =
           (sessionExt.shortcutStatsNonConsecutive[keyName] || 0) + 1;
       }
+      this.sessionData.lastHeartbeatAt = new Date().toISOString();
       this.dirtySession = true;
     }
 
@@ -240,11 +291,23 @@ export class StatsStore {
   }
 
   public getLastExportDir(): string | undefined {
-    return this.context.globalState.get<string>("lastSessionExportDir");
+    return (
+      this.context.globalState.get<string>("lastSessionExportDir") ||
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    );
   }
 
   public async setLastExportDir(dirPath: string): Promise<void> {
     await this.context.globalState.update("lastSessionExportDir", dirPath);
+  }
+
+  public async setSessionName(name: string): Promise<void> {
+    this.ensureLoaded();
+    const trimmed = name.trim();
+    this.sessionData.name = trimmed.length > 0 ? trimmed : undefined;
+    this.dirtySession = true;
+    this.notifyChanged();
+    await this.flush();
   }
 
   public async markStatsModified(): Promise<void> {
@@ -272,12 +335,12 @@ export class StatsStore {
 
   public async saveSessionData(sessionData: SessionData): Promise<void> {
     this.ensureLoaded();
-    // 万一 initialKeybindings が渡されても globalState には混入させない
     if (sessionData.initialKeybindings) {
       await this.setInitialKeybindings(sessionData.initialKeybindings);
       sessionData = { ...sessionData, initialKeybindings: undefined };
     }
     this.sessionData = sessionData;
+    this.syncHeartbeatTimer();
     this.dirtySession = true;
     this.notifyChanged();
     await this.flush();
@@ -288,11 +351,17 @@ export class StatsStore {
     await this.setInitialKeybindings(undefined);
     this.sessionData = {
       isActive: false,
+      name: undefined,
+      startedAt: undefined,
+      stoppedAt: undefined,
       accumulatedMs: 0,
+      lastStartedAt: undefined,
+      lastHeartbeatAt: undefined,
       statsByExt: {},
       initialKeybindingsCount: undefined,
       keybindingsDiff: undefined,
     };
+    this.syncHeartbeatTimer();
     this.dirtySession = true;
     this.notifyChanged();
     await this.flush();
@@ -369,6 +438,35 @@ export class StatsStore {
   }
 
   /**
+   * VS Code 終了時に呼び出し、計測中セッションのここまでの経過時間を確定して閉鎖中時間を除外する
+   */
+  public shutdown(): Promise<void> {
+    if (this.heartbeatTimer !== undefined) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
+
+    if (
+      this.loaded &&
+      this.sessionData.isActive &&
+      this.sessionData.lastStartedAt
+    ) {
+      const startMs = new Date(this.sessionData.lastStartedAt).getTime();
+      if (!isNaN(startMs)) {
+        this.sessionData.accumulatedMs =
+          (this.sessionData.accumulatedMs || 0) +
+          Math.max(0, Date.now() - startMs);
+      }
+      // isActive = true は維持したまま lastStartedAt をクリア（次回起動時にそこから再開）
+      this.sessionData.lastStartedAt = undefined;
+      this.sessionData.lastHeartbeatAt = undefined;
+      this.dirtySession = true;
+    }
+
+    return this.flush();
+  }
+
+  /**
    * 未保存のインメモリ統計を即座に globalState へ永続化する
    */
   public flush(): Promise<void> {
@@ -393,7 +491,10 @@ export class StatsStore {
       const updates: Thenable<void>[] = [];
       if (saveStats) {
         updates.push(
-          this.context.globalState.update("shortcutStatsByExt", this.statsByExt),
+          this.context.globalState.update(
+            "shortcutStatsByExt",
+            this.statsByExt,
+          ),
         );
       }
       if (saveLastKey) {

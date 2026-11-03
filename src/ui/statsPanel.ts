@@ -1,18 +1,32 @@
 import * as crypto from "crypto";
 import * as vscode from "vscode";
+import {
+  getUserKeybindingsUri,
+  syncSessionKeybindingsDiff,
+} from "../services/keybindingsService";
+import {
+  executeSessionExport,
+  importStatsFromText,
+  pauseSession,
+  startOrResumeSession,
+} from "../services/sessionService";
 import type { StatsStore } from "../store/statsStore";
-import type { KeybindingsDiffResult, StatsByExtension } from "../types";
+import type {
+  KeybindingsDiffResult,
+  SessionExportOptions,
+  StatsByExtension,
+  WebviewModalTarget,
+} from "../types";
 
-/**
- * Webview 表示中のリアルタイム反映スロットル間隔 (ms)
- */
 const LIVE_PUSH_INTERVAL_MS = 200;
 
 export interface StatsWebviewPayload {
   statsByExt: StatsByExtension;
   lastTrackedKey: string | null;
+  lastExportDir: string | null;
   session: {
     isActive: boolean;
+    name: string | null;
     startedAt: string | null;
     stoppedAt: string | null;
     accumulatedMs: number;
@@ -22,6 +36,12 @@ export interface StatsWebviewPayload {
     keybindingsDiff: KeybindingsDiffResult | null;
   };
   serverNowMs: number;
+}
+
+export interface OpenPanelOptions {
+  initialMode?: "global" | "session";
+  openModal?: WebviewModalTarget;
+  onCopyTsvFallback?: (tabType?: string) => Promise<void>;
 }
 
 let currentPanel: vscode.WebviewPanel | undefined;
@@ -36,8 +56,10 @@ function buildStatsPayload(store: StatsStore): StatsWebviewPayload {
   return {
     statsByExt: store.getStatsByExt(),
     lastTrackedKey: store.getLastTrackedKey() ?? null,
+    lastExportDir: store.getLastExportDir() ?? null,
     session: {
       isActive: Boolean(sessionData.isActive),
+      name: sessionData.name ?? null,
       startedAt: sessionData.startedAt ?? null,
       stoppedAt: sessionData.stoppedAt ?? null,
       accumulatedMs: sessionData.accumulatedMs || 0,
@@ -50,9 +72,6 @@ function buildStatsPayload(store: StatsStore): StatsWebviewPayload {
   };
 }
 
-/**
- * 統計パネルが開いている場合、画面をリロードせずに JSON メッセージで差分レス更新する
- */
 export async function refreshStatsPanel(store: StatsStore): Promise<void> {
   if (!currentPanel) {
     return;
@@ -65,11 +84,23 @@ export async function refreshStatsPanel(store: StatsStore): Promise<void> {
 
 export async function openOrRevealStatsPanel(
   store: StatsStore,
-  onCopyTsvFallback?: (tabType?: string) => Promise<void>,
+  options?: OpenPanelOptions,
 ): Promise<void> {
+  // パネル表示前に初期スナップショットがある場合は最新差分を自動同期
+  if (store.getSessionData().initialKeybindingsCount) {
+    void syncSessionKeybindingsDiff(store);
+  }
+
   if (currentPanel) {
     currentPanel.reveal(vscode.ViewColumn.One);
     await refreshStatsPanel(store);
+    if (options?.initialMode || options?.openModal) {
+      await currentPanel.webview.postMessage({
+        type: "navigate",
+        mode: options.initialMode,
+        modal: options.openModal,
+      });
+    }
     return;
   }
 
@@ -88,6 +119,10 @@ export async function openOrRevealStatsPanel(
   const panelDisposables: vscode.Disposable[] = [];
   let livePushTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingPushWhileHidden = false;
+  let pendingNavigation =
+    options?.initialMode || options?.openModal
+      ? { mode: options.initialMode, modal: options.openModal }
+      : undefined;
 
   const pushNow = () => {
     if (!currentPanel) {
@@ -121,13 +156,29 @@ export async function openOrRevealStatsPanel(
     }, LIVE_PUSH_INTERVAL_MS);
   };
 
-  // パネルが開いている間のみストア変更を購読し、リアルタイム反映する
   panelDisposables.push(store.onDidChange(scheduleLivePush));
+
+  // パネルが開いている間に keybindings.json が保存されたら差分を自動再計算
+  const userKbPath = getUserKeybindingsUri()?.fsPath.toLowerCase();
+  if (userKbPath) {
+    panelDisposables.push(
+      vscode.workspace.onDidSaveTextDocument((doc) => {
+        if (doc.fileName.toLowerCase() === userKbPath) {
+          void syncSessionKeybindingsDiff(store);
+        }
+      }),
+    );
+  }
 
   panel.onDidChangeViewState(
     (e) => {
-      if (e.webviewPanel.visible && pendingPushWhileHidden) {
-        pushNow();
+      if (e.webviewPanel.visible) {
+        if (pendingPushWhileHidden) {
+          pushNow();
+        }
+        if (store.getSessionData().initialKeybindingsCount) {
+          void syncSessionKeybindingsDiff(store);
+        }
       }
     },
     null,
@@ -154,64 +205,293 @@ export async function openOrRevealStatsPanel(
   panel.webview.onDidReceiveMessage(
     async (message) => {
       switch (message.command) {
-        case "ready":
+        case "ready": {
           await refreshStatsPanel(store);
+          if (pendingNavigation) {
+            const nav = pendingNavigation;
+            pendingNavigation = undefined;
+            await panel.webview.postMessage({
+              type: "navigate",
+              mode: nav.mode,
+              modal: nav.modal,
+            });
+          }
           break;
-        case "copyDirectText":
-          if (typeof message.text === "string") {
+        }
+
+        case "copyDirectText": {
+          if (typeof message.text === "string" && message.text.length > 0) {
             await vscode.env.clipboard.writeText(message.text);
-            if (typeof message.infoMessage === "string" && message.infoMessage) {
-              vscode.window.showInformationMessage(message.infoMessage);
+          }
+          if (typeof message.infoMessage === "string" && message.infoMessage) {
+            vscode.window.setStatusBarMessage(message.infoMessage, 3500);
+            await panel.webview.postMessage({
+              type: "toast",
+              kind: "success",
+              message: message.infoMessage,
+            });
+          }
+          break;
+        }
+
+        case "refresh": {
+          await syncSessionKeybindingsDiff(store);
+          await refreshStatsPanel(store);
+          await panel.webview.postMessage({
+            type: "toast",
+            kind: "info",
+            message: "最新の統計・差分データに更新しました",
+          });
+          break;
+        }
+
+        case "startSession": {
+          const res = await startOrResumeSession(store, message.sessionName);
+          await refreshStatsPanel(store);
+          if (!res.alreadyActive) {
+            const label = res.isNewSession
+              ? res.snapshotCount
+                ? `セッション計測を開始しました（初期キーバインド ${res.snapshotCount.toLocaleString()} 件を自動記録）`
+                : "セッション計測を開始しました"
+              : "セッション計測を再開しました";
+            vscode.window.setStatusBarMessage(label, 3500);
+            await panel.webview.postMessage({
+              type: "toast",
+              kind: "success",
+              message: label,
+            });
+          }
+          break;
+        }
+
+        case "stopSession": {
+          const paused = await pauseSession(store);
+          await refreshStatsPanel(store);
+          if (paused) {
+            vscode.window.setStatusBarMessage(
+              "セッション計測を一時停止しました",
+              3000,
+            );
+            await panel.webview.postMessage({
+              type: "toast",
+              kind: "info",
+              message: "セッション計測を一時停止しました",
+            });
+          }
+          break;
+        }
+
+        case "updateSessionName": {
+          if (typeof message.name === "string") {
+            await store.setSessionName(message.name);
+            await refreshStatsPanel(store);
+          }
+          break;
+        }
+
+        case "recalcDiff": {
+          const diff = await syncSessionKeybindingsDiff(store);
+          await refreshStatsPanel(store);
+          await panel.webview.postMessage({
+            type: "toast",
+            kind: "info",
+            message: diff
+              ? `キーバインド差分を再計算しました（変更 ${diff.diffs.length} 件）`
+              : "比較元となる初期キーバインドが記録されていません",
+          });
+          break;
+        }
+
+        case "browseExportDir": {
+          const currentDir =
+            typeof message.currentDir === "string" && message.currentDir.trim()
+              ? message.currentDir.trim()
+              : store.getLastExportDir();
+          const picked = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            defaultUri: currentDir ? vscode.Uri.file(currentDir) : undefined,
+            title: "セッションデータの保存先フォルダを選択",
+            openLabel: "このフォルダを選択",
+          });
+          if (picked && picked.length > 0) {
+            const fsPath = picked[0].fsPath;
+            await store.setLastExportDir(fsPath);
+            await panel.webview.postMessage({
+              type: "exportDirPicked",
+              dirPath: fsPath,
+            });
+          }
+          break;
+        }
+
+        case "executeSessionExport": {
+          try {
+            const opts = message.options as SessionExportOptions;
+            const result = await executeSessionExport(store, opts);
+            await refreshStatsPanel(store);
+            await panel.webview.postMessage({
+              type: "exportSessionResult",
+              ok: true,
+              outputDirPath: result.outputDirUri.fsPath,
+              primaryFilePath: result.primaryFileUri?.fsPath ?? null,
+              savedFiles: result.savedFiles,
+              resetPerformed: result.resetPerformed,
+            });
+          } catch (err: any) {
+            await panel.webview.postMessage({
+              type: "exportSessionResult",
+              ok: false,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "ファイルの保存中にエラーが発生しました。",
+            });
+          }
+          break;
+        }
+
+        case "openExportedPath": {
+          if (typeof message.filePath === "string" && message.filePath) {
+            const uri = vscode.Uri.file(message.filePath);
+            if (message.revealInOs) {
+              await vscode.commands.executeCommand("revealFileInOS", uri);
+            } else {
+              const doc = await vscode.workspace.openTextDocument(uri);
+              await vscode.window.showTextDocument(doc);
             }
           }
           break;
+        }
+
+        case "browseImportFile": {
+          const picked = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            filters: {
+              "JSON / JSONC": ["json", "jsonc"],
+            },
+            title: "インポートする統計JSONファイルを選択",
+            openLabel: "読み込む",
+          });
+          if (picked && picked.length > 0) {
+            try {
+              const bytes = await vscode.workspace.fs.readFile(picked[0]);
+              const text = new TextDecoder("utf-8").decode(bytes);
+              await panel.webview.postMessage({
+                type: "importFileLoaded",
+                fileName: picked[0].fsPath,
+                content: text,
+              });
+            } catch {
+              await panel.webview.postMessage({
+                type: "importJsonResult",
+                ok: false,
+                error: "選択されたファイルを読み込めませんでした。",
+              });
+            }
+          }
+          break;
+        }
+
+        case "executeImportJson": {
+          try {
+            const summary = await importStatsFromText(
+              store,
+              String(message.rawJson || ""),
+            );
+            await refreshStatsPanel(store);
+            await panel.webview.postMessage({
+              type: "importJsonResult",
+              ok: true,
+              addedKeysCount: summary.addedKeysCount,
+              addedTotalCount: summary.addedTotalCount,
+            });
+          } catch (err: any) {
+            await panel.webview.postMessage({
+              type: "importJsonResult",
+              ok: false,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "インポートに失敗しました。",
+            });
+          }
+          break;
+        }
+
+        case "confirmResetSession": {
+          await store.resetSession();
+          await refreshStatsPanel(store);
+          await panel.webview.postMessage({
+            type: "toast",
+            kind: "success",
+            message: "セッション計測データをリセットしました",
+          });
+          break;
+        }
+
+        case "confirmResetGlobal": {
+          await store.resetAllStats();
+          await refreshStatsPanel(store);
+          await panel.webview.postMessage({
+            type: "toast",
+            kind: "success",
+            message: "累計統計データをすべて削除しました",
+          });
+          break;
+        }
+
         case "copyJson":
           await vscode.commands.executeCommand("myTracker.copyStatsJson");
+          await panel.webview.postMessage({
+            type: "toast",
+            kind: "success",
+            message: "累計統計のJSONデータをコピーしました",
+          });
           break;
+
+        case "copySessionJson":
+          await vscode.commands.executeCommand("myTracker.copySessionJson");
+          await panel.webview.postMessage({
+            type: "toast",
+            kind: "success",
+            message: "セッション統計のJSONデータをコピーしました",
+          });
+          break;
+
+        case "copyKeybindingsDiffJson": {
+          await syncSessionKeybindingsDiff(store);
+          const diff = store.getSessionData().keybindingsDiff;
+          if (!diff) {
+            await panel.webview.postMessage({
+              type: "toast",
+              kind: "info",
+              message: "キーバインド差分データがありません",
+            });
+          } else {
+            await vscode.env.clipboard.writeText(JSON.stringify(diff, null, 2));
+            await panel.webview.postMessage({
+              type: "toast",
+              kind: "success",
+              message: `キーバインド差分JSON（${diff.diffs.length} 件）をコピーしました`,
+            });
+          }
+          break;
+        }
+
         case "copyTsv":
-          if (onCopyTsvFallback) {
-            await onCopyTsvFallback(message.tabType);
+          if (options?.onCopyTsvFallback) {
+            await options.onCopyTsvFallback(message.tabType);
           } else {
             await vscode.commands.executeCommand("myTracker.copyStatsTsv");
           }
           break;
-        case "refresh":
-          await refreshStatsPanel(store);
-          vscode.window.setStatusBarMessage(
-            "ショートカット統計を最新に更新しました",
-            2000,
-          );
-          break;
-        case "importJson":
-          await vscode.commands.executeCommand("myTracker.importStatsJson");
-          break;
-        case "reset":
-          await vscode.commands.executeCommand("myTracker.resetStats");
-          break;
-        case "startSession":
-          await vscode.commands.executeCommand("myTracker.startSession");
-          break;
-        case "stopSession":
-          await vscode.commands.executeCommand("myTracker.stopSession");
-          break;
-        case "resetSession":
-          await vscode.commands.executeCommand("myTracker.resetSession");
-          break;
-        case "copySessionJson":
-          await vscode.commands.executeCommand("myTracker.copySessionJson");
-          break;
+
         case "copySessionTsv":
           await vscode.commands.executeCommand("myTracker.copySessionTsv");
-          break;
-        case "copyKeybindingsDiffJson":
-          await vscode.commands.executeCommand(
-            "myTracker.copyKeybindingsDiffJson",
-          );
-          break;
-        case "exportSessionToDirectory":
-          await vscode.commands.executeCommand(
-            "myTracker.exportSessionToDirectory",
-          );
           break;
       }
     },
@@ -247,7 +527,6 @@ async function renderInitialHtml(
   );
   const nonce = crypto.randomBytes(16).toString("base64");
 
-  // 初回描画チラつきゼロのため初期JSONを埋め込み（</script> インジェクション防止エスケープ済み）
   const safeInitialJson = JSON.stringify(buildStatsPayload(store)).replace(
     /</g,
     "\\u003c",

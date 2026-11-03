@@ -43,7 +43,7 @@
             data-mode="session"
           >
             <span>セッション計測</span>
-            <span id="badge-session-status" class="tab-badge">停止中</span>
+            <span id="badge-session-status" class="tab-badge">未開始</span>
           </button>
         </nav>
 
@@ -51,7 +51,7 @@
           type="button"
           class="btn btn-ghost icon-btn"
           data-action="refresh"
-          title="統計を手動更新"
+          title="統計とキーバインド差分を最新化"
         >
           ↻ 更新
         </button>
@@ -60,25 +60,17 @@
 
     <!-- セッション専用コントロールバー (セッションモード時のみ表示) -->
     <section id="session-hero" class="session-hero hidden" aria-label="セッション計測操作">
-      <div class="session-hero-main">
-        <div class="session-state-group">
-          <span id="session-live-badge" class="live-status-badge inactive">
-            <span class="pulse-dot"></span>
-            <span id="session-live-text">停止中</span>
-          </span>
-          <div class="session-timer-block">
-            <span class="meta-label">経過時間</span>
-            <span id="session-duration" class="session-timer-value">0秒</span>
-          </div>
-          <div class="session-meta-divider"></div>
-          <div class="session-meta-item">
-            <span class="meta-label">開始日時</span>
-            <span id="session-started-at" class="meta-value">(未開始)</span>
-          </div>
-          <div class="session-meta-item">
-            <span class="meta-label">初期キーバインド</span>
-            <span id="session-snapshot-info" class="meta-value">未保存</span>
-          </div>
+      <div class="session-hero-top">
+        <div class="session-name-wrap">
+          <label for="session-name-input" class="meta-label">セッション名 / メモ</label>
+          <input
+            type="text"
+            id="session-name-input"
+            class="session-name-input"
+            placeholder="未設定（例: キー配列 v4 テスト）..."
+            maxlength="80"
+            autocomplete="off"
+          />
         </div>
 
         <div class="session-hero-actions">
@@ -88,24 +80,46 @@
             class="btn btn-primary"
             data-action="toggle-session"
           >
-            ▶ 計測を開始
+            ▶ 新規計測を開始
           </button>
           <button
             type="button"
+            id="btn-session-save"
             class="btn btn-secondary"
-            data-action="export-session-dir"
-            title="セッション統計・差分・初期キーバインドをローカルフォルダに保存"
+            data-action="open-export-modal"
+            title="ローカルフォルダへ保存（保存のみ／保存してリセットを選択可能）"
           >
-            💾 フォルダに保存
+            💾 保存 / 完了...
           </button>
           <button
             type="button"
+            id="btn-session-reset"
             class="btn btn-danger-outline"
-            data-action="reset-session"
-            title="セッション計測データのみをリセット（累計統計には影響しません）"
+            data-action="open-reset-session-modal"
+            title="セッション計測データをリセット（累計統計には影響しません）"
           >
             リセット
           </button>
+        </div>
+      </div>
+
+      <div class="session-hero-meta">
+        <span id="session-live-badge" class="live-status-badge inactive">
+          <span class="pulse-dot"></span>
+          <span id="session-live-text">未開始</span>
+        </span>
+        <div class="session-timer-block">
+          <span class="meta-label">有効計測時間（VS Code閉鎖中を自動除外）</span>
+          <span id="session-duration" class="session-timer-value">0秒</span>
+        </div>
+        <div class="session-meta-divider"></div>
+        <div class="session-meta-item">
+          <span class="meta-label">初回開始日時</span>
+          <span id="session-started-at" class="meta-value">(未開始)</span>
+        </div>
+        <div class="session-meta-item">
+          <span class="meta-label">初期キーバインド（自動記録）</span>
+          <span id="session-snapshot-info" class="meta-value">開始時に自動保存</span>
         </div>
       </div>
     </section>
@@ -152,7 +166,7 @@
       </div>
     </section>
 
-    <!-- セッション キーバインド変更差分アコーディオン (セッションモードかつ差分データ存在時のみ表示) -->
+    <!-- セッション キーバインド変更差分アコーディオン (セッションモードかつ初期スナップショット存在時に表示) -->
     <section id="diff-section" class="diff-accordion hidden" aria-label="キーバインド変更差分">
       <div class="diff-header">
         <button
@@ -163,11 +177,19 @@
           aria-expanded="false"
         >
           <span id="diff-chevron" class="chevron">▸</span>
-          <span class="diff-title">キーバインドの変更差分</span>
+          <span class="diff-title">開始時からのキーバインド変更差分</span>
           <span id="diff-summary-badges" class="diff-badges-group"></span>
         </button>
 
         <div class="diff-header-actions">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            data-action="recalc-diff"
+            title="現在の keybindings.json と比較して差分を再計算します"
+          >
+            ↻ 再計算
+          </button>
           <button
             type="button"
             id="btn-copy-diff-json"
@@ -181,7 +203,7 @@
 
       <div id="diff-body" class="diff-body hidden">
         <div id="diff-empty-msg" class="diff-empty-msg hidden">
-          セッション開始時からキーバインド設定の変更はありませんでした（開始時と同一）。
+          セッション開始時からキーバインド設定の変更はありません（開始時と同一）。
         </div>
 
         <div id="diff-content-wrap">
@@ -328,13 +350,6 @@
                 <div class="dropdown-item-desc">2ブロックに分けて出力</div>
               </div>
             </button>
-            <div class="dropdown-divider"></div>
-            <button type="button" class="dropdown-item" data-action="open-tsv-quickpick">
-              <span class="check-mark"></span>
-              <div class="dropdown-item-body">
-                <div class="dropdown-item-title">ダイアログで拡張子を選んでコピー...</div>
-              </div>
-            </button>
           </div>
         </div>
 
@@ -351,15 +366,15 @@
           <button
             type="button"
             class="btn btn-secondary"
-            data-action="import-json"
-            title="JSON形式の統計データをインポートして合算"
+            data-action="open-import-modal"
+            title="JSON / JSONC 形式の統計データをインポートして合算"
           >
             📥 インポート
           </button>
           <button
             type="button"
             class="btn btn-danger-outline"
-            data-action="reset-global"
+            data-action="open-reset-global-modal"
             title="累計統計データをすべて削除"
           >
             🗑️ 削除
@@ -405,7 +420,202 @@
     </section>
   </div>
 
-  <!-- 初期データ埋め込み（初回描画ラグ防止） -->
+  <!-- ========================================================= -->
+  <!-- Webview 内完結モーダル群（VS Code ネイティブ QuickPick 不要） -->
+  <!-- ========================================================= -->
+  <div id="modal-backdrop" class="modal-backdrop hidden" data-action="backdrop-close">
+    <!-- 1. セッション保存・完了モーダル -->
+    <div id="modal-export-session" class="modal-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="modal-export-title">
+      <div class="modal-header">
+        <h2 id="modal-export-title" class="modal-title">💾 セッションデータをフォルダに保存</h2>
+        <button type="button" class="modal-close-btn" data-action="close-modal" title="閉じる (Esc)">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-field">
+          <label for="export-session-name" class="field-label">セッション名 / メモ（任意・フォルダ名やJSONに記録）</label>
+          <input
+            type="text"
+            id="export-session-name"
+            class="field-input"
+            placeholder="例: v4-cursor-tuning"
+            maxlength="80"
+          />
+        </div>
+
+        <div class="form-field">
+          <label for="export-dir-input" class="field-label">保存先ベースフォルダ</label>
+          <div class="input-with-btn">
+            <input
+              type="text"
+              id="export-dir-input"
+              class="field-input"
+              placeholder="フォルダを選択してください..."
+            />
+            <button type="button" class="btn btn-secondary" data-action="browse-export-dir">
+              📂 参照...
+            </button>
+          </div>
+          <div id="export-path-preview" class="field-hint truncate"></div>
+        </div>
+
+        <div class="form-field">
+          <span class="field-label">出力オプション</span>
+          <label class="checkbox-row highlight-row">
+            <input type="checkbox" id="chk-export-subdir" checked />
+            <div class="checkbox-text">
+              <span class="checkbox-title">日時サブフォルダを作成してまとめる（推奨）</span>
+              <span class="checkbox-desc">ローカル時刻（YYYY-MM-DD_HHmmss_メモ名）のフォルダ内に整理して保存</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-field">
+          <span class="field-label">保存するファイル</span>
+          <div class="checkbox-list">
+            <label class="checkbox-row">
+              <input type="checkbox" id="chk-export-stats-json" checked />
+              <div class="checkbox-text">
+                <span class="checkbox-title">セッション統計データ (JSON)</span>
+                <span class="checkbox-desc">拡張子別打鍵数・サマリー・変更差分を含む構造化データ</span>
+              </div>
+            </label>
+
+            <label class="checkbox-row">
+              <input type="checkbox" id="chk-export-stats-tsv" checked />
+              <div class="checkbox-text">
+                <span class="checkbox-title">セッション統計データ (AI分析用 統合TSV)</span>
+                <span class="checkbox-desc">キー / 全入力 / 全入力% / 非連続 / 非連続% / リピート率</span>
+              </div>
+            </label>
+
+            <label class="checkbox-row">
+              <input type="checkbox" id="chk-export-diff-json" checked />
+              <div class="checkbox-text">
+                <span class="checkbox-title">キーバインド変更差分 (JSON) <span id="export-diff-hint" class="inline-hint-badge"></span></span>
+                <span class="checkbox-desc">開始時スナップショットから追加・変更・削除された設定の差分</span>
+              </div>
+            </label>
+
+            <label class="checkbox-row">
+              <input type="checkbox" id="chk-export-initial-kb" checked />
+              <div class="checkbox-text">
+                <span class="checkbox-title">開始時のキーバインド設定 (JSON) <span id="export-init-kb-hint" class="inline-hint-badge"></span></span>
+                <span class="checkbox-desc">セッション開始時点で自動記録された keybindings スナップショット</span>
+              </div>
+            </label>
+
+            <label class="checkbox-row">
+              <input type="checkbox" id="chk-export-current-kb" />
+              <div class="checkbox-text">
+                <span class="checkbox-title">現在のキーバインド設定 (JSONC)</span>
+                <span class="checkbox-desc">コメントやリージョンを維持した現在の keybindings.json 本体</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div id="export-modal-error" class="modal-alert error hidden"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-action="close-modal">キャンセル</button>
+        <div class="modal-footer-right">
+          <button
+            type="button"
+            id="btn-exec-export-keep"
+            class="btn btn-secondary"
+            data-action="submit-export-keep"
+          >
+            保存のみ（計測データを残す）
+          </button>
+          <button
+            type="button"
+            id="btn-exec-export-reset"
+            class="btn btn-primary"
+            data-action="submit-export-reset"
+          >
+            保存してリセット（完了）
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. JSON / JSONC インポートモーダル -->
+    <div id="modal-import-json" class="modal-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="modal-import-title">
+      <div class="modal-header">
+        <h2 id="modal-import-title" class="modal-title">📥 統計データのインポート（累計統計に合算）</h2>
+        <button type="button" class="modal-close-btn" data-action="close-modal" title="閉じる (Esc)">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="import-toolbar">
+          <span class="field-hint">JSON またはコメント付き JSONC データを貼り付けるか、ファイルから読み込んでください。</span>
+          <button type="button" class="btn btn-secondary btn-sm" data-action="browse-import-file">
+            📂 ファイルを選択...
+          </button>
+        </div>
+
+        <textarea
+          id="import-json-textarea"
+          class="field-textarea"
+          rows="9"
+          placeholder='{"version": 2, "byExtension": { ".ts": { "shortcutStats": { "cursorUp (alt+k)": 100 } } }}'
+          spellcheck="false"
+        ></textarea>
+
+        <div id="import-file-badge" class="field-hint hidden"></div>
+        <div id="import-modal-error" class="modal-alert error hidden"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-action="close-modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" data-action="submit-import-json">
+          累計統計へ合算インポート
+        </button>
+      </div>
+    </div>
+
+    <!-- 3. リセット / 削除確認モーダル -->
+    <div id="modal-confirm-reset" class="modal-dialog modal-sm hidden" role="dialog" aria-modal="true" aria-labelledby="modal-reset-title">
+      <div class="modal-header">
+        <h2 id="modal-reset-title" class="modal-title">データのリセット確認</h2>
+        <button type="button" class="modal-close-btn" data-action="close-modal" title="閉じる (Esc)">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p id="modal-reset-desc" class="reset-desc"></p>
+        <div id="modal-reset-summary" class="reset-summary-box"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-action="close-modal">キャンセル</button>
+        <div class="modal-footer-right">
+          <button
+            type="button"
+            id="btn-switch-to-export"
+            class="btn btn-secondary hidden"
+            data-action="open-export-modal"
+          >
+            💾 先に保存する...
+          </button>
+          <button
+            type="button"
+            id="btn-confirm-reset-exec"
+            class="btn btn-danger-solid"
+            data-action="execute-confirmed-reset"
+          >
+            リセットする
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Webview 内トースト通知 -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- 初期データ埋め込み -->
   <script id="initial-data" type="application/json" nonce="{{NONCE}}">{{INITIAL_JSON}}</script>
   <script nonce="{{NONCE}}" src="{{SCRIPT_URI}}"></script>
 </body>

@@ -26,6 +26,17 @@
     expandedGroupIds: Array.isArray(savedState.expandedGroupIds)
       ? savedState.expandedGroupIds
       : [],
+    exportPrefs: Object.assign(
+      {
+        createSubdirectory: true,
+        includeStatsJson: true,
+        includeStatsTsv: true,
+        includeDiffJson: true,
+        includeInitialKb: true,
+        includeCurrentKb: false,
+      },
+      savedState.exportPrefs || {},
+    ),
   };
 
   function persistState() {
@@ -36,8 +47,10 @@
   let appData = {
     statsByExt: {},
     lastTrackedKey: null,
+    lastExportDir: null,
     session: {
       isActive: false,
+      name: null,
       startedAt: null,
       stoppedAt: null,
       accumulatedMs: 0,
@@ -50,13 +63,14 @@
   };
   let clockOffsetMs = 0;
   let sessionTickTimer = null;
+  let activeModalId = null; // "exportSession" | "importJson" | "resetSession" | "resetGlobal" | null
+  let isSubmittingExport = false;
 
-  // 現在画面に表示されている行キャッシュ（TSV即時出力用）
   let currentFilteredContext = {
     visibleRows: [],
     totalInputs: 0,
     totalNonConsecutive: 0,
-    scopeLabel: "累計統計",
+    scopeLabel: "メイン統計",
     extSummaryLabel: "全拡張子",
   };
 
@@ -73,10 +87,6 @@
     return String(str).replace(/[&<>"']/g, (ch) => ESCAPE_MAP[ch]);
   }
 
-  /**
-   * "cursorUp (alt+k)" -> { commandLabel: "cursorUp", shortcut: "alt+k" }
-   * "alt+k" -> { commandLabel: "", shortcut: "alt+k" }
-   */
   const parseCache = new Map();
   function parseKeyEntry(rawKey) {
     const keyStr = String(rawKey || "");
@@ -88,7 +98,6 @@
     let commandLabel = "";
     let shortcut = keyStr.trim();
 
-    // 末尾の "(...)" をショートカットキーとして抽出
     const match = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(keyStr);
     if (match && match[2].trim()) {
       commandLabel = match[1].trim();
@@ -100,9 +109,6 @@
     return parsed;
   }
 
-  /**
-   * "ctrl++" や "shift+alt+k" をキー単位の配列に分解
-   */
   function splitKeyCombo(chord) {
     const parts = [];
     let buf = "";
@@ -131,9 +137,6 @@
     return parts;
   }
 
-  /**
-   * ショートカット文字列 ("alt+f alt+e" 等) を <kbd> バッジ列の HTML に変換
-   */
   const kbdHtmlCache = new Map();
   function renderShortcutKbdHtml(shortcutStr) {
     const s = String(shortcutStr || "").trim();
@@ -165,7 +168,9 @@
     if (sess.isActive && sess.lastStartedAt) {
       const startMs = new Date(sess.lastStartedAt).getTime();
       const nowMs = Date.now() + clockOffsetMs;
-      ms += Math.max(0, nowMs - startMs);
+      if (!isNaN(startMs)) {
+        ms += Math.max(0, nowMs - startMs);
+      }
     }
     return ms;
   }
@@ -193,6 +198,21 @@
     const mm = String(m).padStart(2, "0");
     const ss = String(s).padStart(2, "0");
     return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  }
+
+  function formatLocalPreviewStamp() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  }
+
+  function sanitizePreviewSegment(raw) {
+    return String(raw || "")
+      .trim()
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")
+      .replace(/\s+/g, "-")
+      .replace(/\.+$/g, "")
+      .slice(0, 60);
   }
 
   // --- Data Aggregation & Grouping ---
@@ -283,7 +303,10 @@
         return {
           id: rawKey,
           tsvKey: rawKey,
-          sortLabel: parsed.shortcut.toLowerCase() + " " + parsed.commandLabel.toLowerCase(),
+          sortLabel:
+            parsed.shortcut.toLowerCase() +
+            " " +
+            parsed.commandLabel.toLowerCase(),
           searchTarget: rawKey.toLowerCase(),
           shortcut: parsed.shortcut,
           commandLabel: parsed.commandLabel,
@@ -295,7 +318,6 @@
       });
     }
 
-    // 物理キー単位での合算モード
     const groupMap = new Map();
     for (const rawKey of allRawKeys) {
       const parsed = parseKeyEntry(rawKey);
@@ -380,7 +402,6 @@
       if (cmp !== 0) {
         return cmp * dir;
       }
-      // タイブレーカー: 総数降順 -> キー名昇順
       if (b.totalCount !== a.totalCount) {
         return b.totalCount - a.totalCount;
       }
@@ -390,7 +411,7 @@
     return filtered;
   }
 
-  // --- DOM Rendering ---
+  // --- DOM Elements ---
   const els = {
     lastKeyContent: document.getElementById("last-key-content"),
     modeTabGlobal: document.getElementById("mode-tab-global"),
@@ -399,12 +420,15 @@
     badgeSessionStatus: document.getElementById("badge-session-status"),
 
     sessionHero: document.getElementById("session-hero"),
+    sessionNameInput: document.getElementById("session-name-input"),
     sessionLiveBadge: document.getElementById("session-live-badge"),
     sessionLiveText: document.getElementById("session-live-text"),
     sessionDuration: document.getElementById("session-duration"),
     sessionStartedAt: document.getElementById("session-started-at"),
     sessionSnapshotInfo: document.getElementById("session-snapshot-info"),
     btnSessionToggle: document.getElementById("btn-session-toggle"),
+    btnSessionSave: document.getElementById("btn-session-save"),
+    btnSessionReset: document.getElementById("btn-session-reset"),
 
     kpiTitleTotal: document.getElementById("kpi-title-total"),
     kpiTotalInputs: document.getElementById("kpi-total-inputs"),
@@ -447,8 +471,236 @@
     globalActionsGroup: document.getElementById("global-actions-group"),
 
     rankingTbody: document.getElementById("ranking-tbody"),
+
+    // Modals & Toast
+    modalBackdrop: document.getElementById("modal-backdrop"),
+    modalExportSession: document.getElementById("modal-export-session"),
+    exportSessionName: document.getElementById("export-session-name"),
+    exportDirInput: document.getElementById("export-dir-input"),
+    exportPathPreview: document.getElementById("export-path-preview"),
+    chkExportSubdir: document.getElementById("chk-export-subdir"),
+    chkExportStatsJson: document.getElementById("chk-export-stats-json"),
+    chkExportStatsTsv: document.getElementById("chk-export-stats-tsv"),
+    chkExportDiffJson: document.getElementById("chk-export-diff-json"),
+    chkExportInitialKb: document.getElementById("chk-export-initial-kb"),
+    chkExportCurrentKb: document.getElementById("chk-export-current-kb"),
+    exportDiffHint: document.getElementById("export-diff-hint"),
+    exportInitKbHint: document.getElementById("export-init-kb-hint"),
+    exportModalError: document.getElementById("export-modal-error"),
+    btnExecExportKeep: document.getElementById("btn-exec-export-keep"),
+    btnExecExportReset: document.getElementById("btn-exec-export-reset"),
+
+    modalImportJson: document.getElementById("modal-import-json"),
+    importJsonTextarea: document.getElementById("import-json-textarea"),
+    importFileBadge: document.getElementById("import-file-badge"),
+    importModalError: document.getElementById("import-modal-error"),
+
+    modalConfirmReset: document.getElementById("modal-confirm-reset"),
+    modalResetTitle: document.getElementById("modal-reset-title"),
+    modalResetDesc: document.getElementById("modal-reset-desc"),
+    modalResetSummary: document.getElementById("modal-reset-summary"),
+    btnSwitchToExport: document.getElementById("btn-switch-to-export"),
+    btnConfirmResetExec: document.getElementById("btn-confirm-reset-exec"),
+
+    toastContainer: document.getElementById("toast-container"),
   };
 
+  // --- Toast Helper ---
+  function showToast(message, kind = "info", actionButtons = []) {
+    if (!els.toastContainer) return;
+
+    const item = document.createElement("div");
+    item.className = `toast-item ${kind === "success" ? "success" : ""}`;
+
+    const textDiv = document.createElement("div");
+    textDiv.textContent = message;
+    item.appendChild(textDiv);
+
+    if (actionButtons.length > 0) {
+      const actionsDiv = document.createElement("div");
+      actionsDiv.className = "toast-actions";
+      for (const act of actionButtons) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn btn-secondary btn-sm";
+        b.textContent = act.label;
+        b.addEventListener("click", () => {
+          act.onClick();
+          item.remove();
+        });
+        actionsDiv.appendChild(b);
+      }
+      item.appendChild(actionsDiv);
+    }
+
+    els.toastContainer.appendChild(item);
+
+    const ttl = actionButtons.length > 0 ? 8000 : 3200;
+    setTimeout(() => {
+      if (item.parentNode) {
+        item.remove();
+      }
+    }, ttl);
+  }
+
+  // --- Modal Control ---
+  function closeModal() {
+    activeModalId = null;
+    els.modalBackdrop.classList.add("hidden");
+    els.modalExportSession.classList.add("hidden");
+    els.modalImportJson.classList.add("hidden");
+    els.modalConfirmReset.classList.add("hidden");
+  }
+
+  function updateExportPathPreview() {
+    const dirVal = (els.exportDirInput.value || "").trim();
+    if (!dirVal) {
+      els.exportPathPreview.textContent =
+        "保存先フォルダを選択してください";
+      return;
+    }
+    const cleanDir = dirVal.replace(/[\\/]+$/, "");
+    const sep = cleanDir.includes("\\") ? "\\" : "/";
+    const stamp = formatLocalPreviewStamp();
+    const safeName = sanitizePreviewSegment(els.exportSessionName.value);
+    const folderOrPrefix = safeName ? `${stamp}_${safeName}` : stamp;
+
+    if (els.chkExportSubdir.checked) {
+      els.exportPathPreview.textContent = `出力先プレビュー: ${cleanDir}${sep}${folderOrPrefix}${sep}`;
+    } else {
+      els.exportPathPreview.textContent = `出力先プレビュー: ${cleanDir}${sep}session-stats-${folderOrPrefix}.json 等`;
+    }
+  }
+
+  function openModal(modalType) {
+    closeModal();
+    activeModalId = modalType;
+    els.modalBackdrop.classList.remove("hidden");
+
+    if (modalType === "exportSession") {
+      const sess = appData.session;
+      els.exportSessionName.value = sess.name || "";
+      if (!els.exportDirInput.value.trim() && appData.lastExportDir) {
+        els.exportDirInput.value = appData.lastExportDir;
+      }
+
+      els.chkExportSubdir.checked = Boolean(state.exportPrefs.createSubdirectory);
+      els.chkExportStatsJson.checked = Boolean(state.exportPrefs.includeStatsJson);
+      els.chkExportStatsTsv.checked = Boolean(state.exportPrefs.includeStatsTsv);
+      els.chkExportDiffJson.checked = Boolean(state.exportPrefs.includeDiffJson);
+      els.chkExportInitialKb.checked = Boolean(state.exportPrefs.includeInitialKb);
+      els.chkExportCurrentKb.checked = Boolean(state.exportPrefs.includeCurrentKb);
+
+      const diffCount = sess.keybindingsDiff?.diffs?.length ?? null;
+      els.exportDiffHint.textContent =
+        diffCount !== null ? `変更 ${diffCount} 件` : "自動計算して出力";
+
+      els.exportInitKbHint.textContent = sess.initialKeybindingsCount
+        ? `${sess.initialKeybindingsCount.toLocaleString()} 件記録済み`
+        : "未記録";
+      els.chkExportInitialKb.disabled = !sess.initialKeybindingsCount;
+      if (!sess.initialKeybindingsCount) {
+        els.chkExportInitialKb.checked = false;
+      }
+
+      els.exportModalError.classList.add("hidden");
+      isSubmittingExport = false;
+      els.btnExecExportKeep.disabled = false;
+      els.btnExecExportReset.disabled = false;
+
+      updateExportPathPreview();
+      els.modalExportSession.classList.remove("hidden");
+      els.exportSessionName.focus();
+    } else if (modalType === "importJson") {
+      els.importModalError.classList.add("hidden");
+      els.importFileBadge.classList.add("hidden");
+      els.modalImportJson.classList.remove("hidden");
+      els.importJsonTextarea.focus();
+    } else if (modalType === "resetSession") {
+      const sess = appData.session;
+      const sessAgg = computeExtensionList(sess.statsByExt);
+      const durText = formatDurationJa(calculateLiveSessionMs());
+
+      els.modalResetTitle.textContent = "セッション計測のリセット確認";
+      els.modalResetDesc.textContent =
+        "現在のセッション計測データ・初期キーバインド記録・変更差分を初期化します（累計統計には影響しません）。";
+      els.modalResetSummary.innerHTML = [
+        `<div>セッション名: <b>${escapeHtml(sess.name || "(未設定)")}</b></div>`,
+        `<div>計測時間: <b>${escapeHtml(durText)}</b> / 記録打鍵数: <b>${sessAgg.grandTotal.toLocaleString()} 回</b></div>`,
+      ].join("");
+
+      const hasSessionData = Boolean(sess.startedAt || sessAgg.grandTotal > 0);
+      els.btnSwitchToExport.classList.toggle("hidden", !hasSessionData);
+      els.btnConfirmResetExec.textContent = "保存せずリセットする";
+      els.modalConfirmReset.classList.remove("hidden");
+    } else if (modalType === "resetGlobal") {
+      const globalAgg = computeExtensionList(appData.statsByExt);
+      els.modalResetTitle.textContent = "累計統計データの全削除確認";
+      els.modalResetDesc.textContent =
+        "これまでに蓄積されたすべての累計ショートカット統計データを完全に削除します。この操作は元に戻せません。";
+      els.modalResetSummary.innerHTML = `<div>削除される累計打鍵数: <b>${globalAgg.grandTotal.toLocaleString()} 回</b>（${globalAgg.list.length} 拡張子）</div>`;
+      els.btnSwitchToExport.classList.add("hidden");
+      els.btnConfirmResetExec.textContent = "すべて削除する";
+      els.modalConfirmReset.classList.remove("hidden");
+    }
+  }
+
+  function submitSessionExport(resetAfterSave) {
+    if (isSubmittingExport) return;
+
+    const dirPath = (els.exportDirInput.value || "").trim();
+    if (!dirPath) {
+      els.exportModalError.textContent =
+        "保存先ベースフォルダを指定してください（「📂 参照...」から選択できます）。";
+      els.exportModalError.classList.remove("hidden");
+      return;
+    }
+
+    const prefs = {
+      createSubdirectory: els.chkExportSubdir.checked,
+      includeStatsJson: els.chkExportStatsJson.checked,
+      includeStatsTsv: els.chkExportStatsTsv.checked,
+      includeDiffJson: els.chkExportDiffJson.checked,
+      includeInitialKb:
+        !els.chkExportInitialKb.disabled && els.chkExportInitialKb.checked,
+      includeCurrentKb: els.chkExportCurrentKb.checked,
+    };
+
+    if (
+      !prefs.includeStatsJson &&
+      !prefs.includeStatsTsv &&
+      !prefs.includeDiffJson &&
+      !prefs.includeInitialKb &&
+      !prefs.includeCurrentKb
+    ) {
+      els.exportModalError.textContent =
+        "保存するファイルを1つ以上チェックしてください。";
+      els.exportModalError.classList.remove("hidden");
+      return;
+    }
+
+    state.exportPrefs = Object.assign({}, state.exportPrefs, prefs);
+    persistState();
+
+    els.exportModalError.classList.add("hidden");
+    isSubmittingExport = true;
+    els.btnExecExportKeep.disabled = true;
+    els.btnExecExportReset.disabled = true;
+
+    vscode.postMessage({
+      command: "executeSessionExport",
+      options: Object.assign(
+        {
+          dirPath,
+          sessionName: els.exportSessionName.value.trim(),
+          resetAfterSave: Boolean(resetAfterSave),
+        },
+        prefs,
+      ),
+    });
+  }
+
+  // --- Rendering ---
   function renderHeaderAndTimersOnly() {
     const sess = appData.session;
     const durationMs = calculateLiveSessionMs();
@@ -461,12 +713,11 @@
       els.badgeSessionStatus.textContent = `一時停止 (${formatDurationCompact(durationMs)})`;
     } else {
       els.badgeSessionStatus.className = "tab-badge";
-      els.badgeSessionStatus.textContent = "停止中";
+      els.badgeSessionStatus.textContent = "未開始";
     }
 
     if (state.mode === "session") {
       els.sessionDuration.textContent = formatDurationJa(durationMs);
-      // セッションモード時は1分あたりペースも更新
       if (durationMs >= 5000 && currentFilteredContext.totalInputs > 0) {
         const perMin = (
           currentFilteredContext.totalInputs /
@@ -489,15 +740,17 @@
   }
 
   function renderDiffSection() {
-    const diff = appData.session.keybindingsDiff;
-    if (state.mode !== "session" || !diff) {
+    const sess = appData.session;
+    const diff = sess.keybindingsDiff;
+    if (state.mode !== "session" || (!diff && !sess.initialKeybindingsCount)) {
       els.diffSection.classList.add("hidden");
       return;
     }
 
     els.diffSection.classList.remove("hidden");
 
-    const totalChanges = Array.isArray(diff.diffs) ? diff.diffs.length : 0;
+    const diffsList = diff && Array.isArray(diff.diffs) ? diff.diffs : [];
+    const totalChanges = diffsList.length;
     const isExpanded =
       state.diffExpanded !== null
         ? state.diffExpanded
@@ -508,7 +761,7 @@
     els.diffBody.classList.toggle("hidden", !isExpanded);
     els.btnCopyDiffJson.classList.toggle("hidden", totalChanges === 0);
 
-    if (totalChanges === 0) {
+    if (!diff || totalChanges === 0) {
       els.diffSummaryBadges.innerHTML =
         '<span class="diff-pill neutral">変更なし</span>';
       els.diffEmptyMsg.classList.remove("hidden");
@@ -532,7 +785,6 @@
     els.diffEmptyMsg.classList.add("hidden");
     els.diffContentWrap.classList.remove("hidden");
 
-    // フィルタボタン状態同期
     els.diffFilterGroup.querySelectorAll(".seg-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.diffType === state.diffFilter);
     });
@@ -543,8 +795,8 @@
 
     const filteredDiffs =
       state.diffFilter === "all"
-        ? diff.diffs
-        : diff.diffs.filter((d) => d.type === state.diffFilter);
+        ? diffsList
+        : diffsList.filter((d) => d.type === state.diffFilter);
 
     if (filteredDiffs.length === 0) {
       els.diffTbody.innerHTML =
@@ -601,7 +853,7 @@
       els.lastKeyContent.textContent = "(なし)";
     }
 
-    // 2. モードタブと全体カウントバッジ
+    // 2. モードタブ更新
     const globalExtInfo = computeExtensionList(appData.statsByExt);
     els.badgeGlobalCount.textContent = globalExtInfo.grandTotal.toLocaleString();
 
@@ -614,37 +866,52 @@
     els.globalActionsGroup.classList.toggle("hidden", isSessionMode);
 
     // 3. セッションコントロールパネル更新
+    const sess = appData.session;
+    const isPaused = !sess.isActive && Boolean(sess.startedAt);
     if (isSessionMode) {
-      const sess = appData.session;
       els.sessionHero.classList.toggle("is-active", sess.isActive);
-      els.sessionLiveBadge.className = sess.isActive
-        ? "live-status-badge active"
-        : "live-status-badge inactive";
-      els.sessionLiveText.textContent = sess.isActive ? "計測中" : "停止中";
+      els.sessionHero.classList.toggle("is-paused", isPaused);
+
+      if (document.activeElement !== els.sessionNameInput) {
+        els.sessionNameInput.value = sess.name || "";
+      }
+
+      if (sess.isActive) {
+        els.sessionLiveBadge.className = "live-status-badge active";
+        els.sessionLiveText.textContent = "計測中";
+        els.btnSessionToggle.className = "btn btn-secondary";
+        els.btnSessionToggle.textContent = "⏸ 一時停止";
+      } else if (isPaused) {
+        els.sessionLiveBadge.className = "live-status-badge paused";
+        els.sessionLiveText.textContent = "一時停止中";
+        els.btnSessionToggle.className = "btn btn-primary";
+        els.btnSessionToggle.textContent = "▶ 計測を再開";
+      } else {
+        els.sessionLiveBadge.className = "live-status-badge inactive";
+        els.sessionLiveText.textContent = "未開始";
+        els.btnSessionToggle.className = "btn btn-primary";
+        els.btnSessionToggle.textContent = "▶ 新規計測を開始";
+      }
+
       els.sessionStartedAt.textContent = sess.startedAt
         ? new Date(sess.startedAt).toLocaleString("ja-JP")
         : "(未開始)";
       els.sessionSnapshotInfo.textContent = sess.initialKeybindingsCount
-        ? `保存済み (${sess.initialKeybindingsCount.toLocaleString()} 件)`
-        : "未保存";
+        ? `記録済み (${sess.initialKeybindingsCount.toLocaleString()} 件)`
+        : "開始時に自動保存";
 
-      if (sess.isActive) {
-        els.btnSessionToggle.className = "btn btn-secondary";
-        els.btnSessionToggle.textContent = "⏸ 計測を一時停止";
-      } else {
-        els.btnSessionToggle.className = "btn btn-primary";
-        els.btnSessionToggle.textContent = sess.startedAt
-          ? "▶ 計測を再開"
-          : "▶ 計測を開始";
-      }
+      const hasAnySessionState = Boolean(
+        sess.startedAt || sess.isActive || sess.name,
+      );
+      els.btnSessionReset.disabled = !hasAnySessionState;
     }
 
-    // 4. 拡張子フィルタチップの構築と無効な選択のクリーンアップ
+    // 4. 拡張子フィルタチップ
     const extInfo = isSessionMode
       ? computeExtensionList(activeStatsByExt)
       : globalExtInfo;
     const availableExtSet = new Set(extInfo.list.map((item) => item.ext));
-    let selectedExts = getActiveSelectedExts().filter((e) =>
+    const selectedExts = getActiveSelectedExts().filter((e) =>
       availableExtSet.has(e),
     );
     setActiveSelectedExts(selectedExts);
@@ -673,7 +940,7 @@
       els.extChipsContainer.innerHTML = chipsHtml;
     }
 
-    // 5. 選択された拡張子で集計・グルーピング・ソート
+    // 5. 集計・グルーピング・ソート
     const aggregated = aggregateBySelectedExts(activeStatsByExt, selectedExts);
     const allBuiltRows = buildRankingRows(
       aggregated.totalStats,
@@ -701,7 +968,6 @@
       aggregated.totalInputs > 0
         ? (consecutiveInputs / aggregated.totalInputs) * 100
         : 0;
-    const repeatRateStr = repeatRateNum.toFixed(1);
 
     els.kpiTitleTotal.textContent = isSessionMode
       ? "セッション総入力 (全入力)"
@@ -728,7 +994,7 @@
 
     els.kpiNonConsecutive.textContent =
       aggregated.totalNonConsecutive.toLocaleString();
-    els.kpiRepeatRate.textContent = repeatRateStr;
+    els.kpiRepeatRate.textContent = repeatRateNum.toFixed(1);
     els.kpiRepeatBar.style.width = `${Math.min(100, Math.max(0, repeatRateNum)).toFixed(1)}%`;
     els.kpiSubRepeat.textContent = `連続打鍵: ${consecutiveInputs.toLocaleString()} 回`;
 
@@ -737,7 +1003,6 @@
     els.kpiUniqueCount.textContent = allBuiltRows.length.toLocaleString();
     els.kpiUniqueUnit.textContent = state.groupMode === "key" ? "キー" : "項目";
 
-    // 最頻出ショートカット表示
     if (allBuiltRows.length > 0) {
       let topRow = allBuiltRows[0];
       for (let i = 1; i < allBuiltRows.length; i++) {
@@ -752,11 +1017,11 @@
       els.kpiSubTop.title = "";
     }
 
-    // 7. ヘッダータイマーと差分セクションの描画
+    // 7. タイマー・差分描画
     renderHeaderAndTimersOnly();
     renderDiffSection();
 
-    // 8. ツールバー状態同期（グルーピング・検索・TSVフォーマット表示・ソート矢印）
+    // 8. ツールバー同期
     els.groupBtnCommand.classList.toggle("active", state.groupMode === "command");
     els.groupBtnKey.classList.toggle("active", state.groupMode === "key");
 
@@ -799,7 +1064,7 @@
       }
     });
 
-    // 9. ランキングテーブル本体の描画
+    // 9. ランキングテーブル描画
     renderRankingTableBody(
       visibleRows,
       allBuiltRows.length,
@@ -823,7 +1088,7 @@
       const emptyDesc = isSessionMode
         ? appData.session.isActive
           ? "ショートカットを使用するとリアルタイムにここへ集計されます。"
-          : "「▶ 計測を開始」を押して特定期間のショートカット使用状況を記録できます。"
+          : "「▶ 新規計測を開始」を押すと、確認ダイアログなしで即座に計測が始まります。"
         : "登録されたショートカットキーを使用すると自動的に集計されます。";
 
       els.rankingTbody.innerHTML = `
@@ -847,7 +1112,6 @@
       return;
     }
 
-    // インライン横棒バーの相対スケール基準（最大値＝100%幅）を算出
     let maxTotal = 1;
     let maxNonConsecutive = 1;
     for (let i = 0; i < visibleRows.length; i++) {
@@ -866,7 +1130,9 @@
       const row = visibleRows[idx];
       const rank = idx + 1;
       const totalPct =
-        totalInputs > 0 ? ((row.totalCount / totalInputs) * 100).toFixed(1) : "0.0";
+        totalInputs > 0
+          ? ((row.totalCount / totalInputs) * 100).toFixed(1)
+          : "0.0";
       const nonConsecPct =
         totalNonConsecutive > 0
           ? ((row.nonConsecutiveCount / totalNonConsecutive) * 100).toFixed(1)
@@ -950,7 +1216,6 @@
           </td>
         </tr>`);
 
-      // 物理キー合算モードの内訳サブ行
       if (isExpanded) {
         for (const child of row.children) {
           const childShareInTotal =
@@ -997,19 +1262,19 @@
 
   // --- Direct Filtered TSV Builder ---
   function copyCurrentViewAsTsv(format) {
-    const { visibleRows, totalInputs, totalNonConsecutive, scopeLabel, extSummaryLabel } =
-      currentFilteredContext;
+    const {
+      visibleRows,
+      totalInputs,
+      totalNonConsecutive,
+      scopeLabel,
+      extSummaryLabel,
+    } = currentFilteredContext;
 
     if (visibleRows.length === 0) {
-      vscode.postMessage({
-        command: "copyDirectText",
-        text: "",
-        infoMessage: `コピー対象の${scopeLabel}データがありません。`,
-      });
+      showToast(`コピー対象の${scopeLabel}データがありません`, "info");
       return;
     }
 
-    // 選択された行集合に対する合計値（検索中でも全体比がずれないよう集計母数を使用、0の場合は行合計にフォールバック）
     const baseTotal =
       totalInputs || visibleRows.reduce((s, r) => s + r.totalCount, 0);
     const baseNonConsec =
@@ -1077,7 +1342,7 @@
     vscode.postMessage({
       command: "copyDirectText",
       text: tsvText,
-      infoMessage: `[${scopeLabel} / ${extSummaryLabel}${groupTag}] ${formatDesc}（${visibleRows.length} 件）をクリップボードにコピーしました。`,
+      infoMessage: `[${scopeLabel} / ${extSummaryLabel}${groupTag}] ${formatDesc}（${visibleRows.length} 件）をコピーしました`,
     });
   }
 
@@ -1086,9 +1351,14 @@
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
 
-    // TSVドロップダウン外クリックで閉じる
     if (!els.tsvMenuContainer.contains(target)) {
       els.tsvDropdown.classList.add("hidden");
+    }
+
+    // モーダル背景の直接クリックで閉じる
+    if (target === els.modalBackdrop) {
+      closeModal();
+      return;
     }
 
     const actionEl = target.closest("[data-action]");
@@ -1113,15 +1383,73 @@
       case "toggle-session":
         vscode.postMessage({
           command: appData.session.isActive ? "stopSession" : "startSession",
+          sessionName: els.sessionNameInput.value.trim(),
         });
         break;
 
-      case "export-session-dir":
-        vscode.postMessage({ command: "exportSessionToDirectory" });
+      case "open-export-modal":
+        openModal("exportSession");
         break;
 
-      case "reset-session":
-        vscode.postMessage({ command: "resetSession" });
+      case "browse-export-dir":
+        vscode.postMessage({
+          command: "browseExportDir",
+          currentDir: els.exportDirInput.value.trim(),
+        });
+        break;
+
+      case "submit-export-keep":
+        submitSessionExport(false);
+        break;
+
+      case "submit-export-reset":
+        submitSessionExport(true);
+        break;
+
+      case "open-import-modal":
+        openModal("importJson");
+        break;
+
+      case "browse-import-file":
+        vscode.postMessage({ command: "browseImportFile" });
+        break;
+
+      case "submit-import-json": {
+        const rawJson = els.importJsonTextarea.value.trim();
+        if (!rawJson) {
+          els.importModalError.textContent =
+            "JSONデータを貼り付けるか、ファイルから読み込んでください。";
+          els.importModalError.classList.remove("hidden");
+          break;
+        }
+        els.importModalError.classList.add("hidden");
+        vscode.postMessage({ command: "executeImportJson", rawJson });
+        break;
+      }
+
+      case "open-reset-session-modal":
+        if (!els.btnSessionReset.disabled) {
+          openModal("resetSession");
+        }
+        break;
+
+      case "open-reset-global-modal":
+        openModal("resetGlobal");
+        break;
+
+      case "execute-confirmed-reset": {
+        const targetModal = activeModalId;
+        closeModal();
+        if (targetModal === "resetSession") {
+          vscode.postMessage({ command: "confirmResetSession" });
+        } else if (targetModal === "resetGlobal") {
+          vscode.postMessage({ command: "confirmResetGlobal" });
+        }
+        break;
+      }
+
+      case "close-modal":
+        closeModal();
         break;
 
       case "toggle-diff-accordion": {
@@ -1132,6 +1460,10 @@
         renderDiffSection();
         break;
       }
+
+      case "recalc-diff":
+        vscode.postMessage({ command: "recalcDiff" });
+        break;
 
       case "filter-diff": {
         const dtype = actionEl.getAttribute("data-diff-type") || "all";
@@ -1232,50 +1564,58 @@
         break;
       }
 
-      case "open-tsv-quickpick":
-        els.tsvDropdown.classList.add("hidden");
-        vscode.postMessage({
-          command: state.mode === "session" ? "copySessionTsv" : "copyTsv",
-        });
-        break;
-
       case "copy-json":
         vscode.postMessage({
           command: state.mode === "session" ? "copySessionJson" : "copyJson",
         });
         break;
-
-      case "import-json":
-        vscode.postMessage({ command: "importJson" });
-        break;
-
-      case "reset-global":
-        vscode.postMessage({ command: "reset" });
-        break;
     }
   });
 
-  // リアルタイムインクリメンタル検索
+  // セッション名の即時保存（変更確定時・Enter押下時）
+  if (els.sessionNameInput) {
+    els.sessionNameInput.addEventListener("change", () => {
+      vscode.postMessage({
+        command: "updateSessionName",
+        name: els.sessionNameInput.value,
+      });
+    });
+    els.sessionNameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        els.sessionNameInput.blur();
+      }
+    });
+  }
+
+  // 保存モーダル入力変更時のパスプレビュー更新
+  [els.exportSessionName, els.exportDirInput, els.chkExportSubdir].forEach(
+    (el) => {
+      if (!el) return;
+      el.addEventListener("input", updateExportPathPreview);
+      el.addEventListener("change", updateExportPathPreview);
+    },
+  );
+
+  // リアルタイム検索
   els.searchInput.addEventListener("input", () => {
     state.searchQuery = els.searchInput.value;
     persistState();
     renderAll();
   });
 
-  // キーボードショートカット (/ で検索フォーカス、Esc で検索/メニュー解除)
+  // キーボードショートカット (/ フォーカス、Esc モーダル/メニュー/検索クリア)
   document.addEventListener("keydown", (event) => {
-    if (
-      event.key === "/" &&
-      document.activeElement !== els.searchInput &&
-      !(document.activeElement instanceof HTMLInputElement)
-    ) {
-      event.preventDefault();
-      els.searchInput.focus();
-      els.searchInput.select();
-    } else if (event.key === "Escape") {
+    if (event.key === "Escape") {
+      if (activeModalId) {
+        event.preventDefault();
+        closeModal();
+        return;
+      }
       if (!els.tsvDropdown.classList.contains("hidden")) {
         els.tsvDropdown.classList.add("hidden");
-      } else if (state.searchQuery.length > 0) {
+        return;
+      }
+      if (state.searchQuery.length > 0) {
         state.searchQuery = "";
         els.searchInput.value = "";
         persistState();
@@ -1283,14 +1623,136 @@
       } else if (document.activeElement === els.searchInput) {
         els.searchInput.blur();
       }
+      return;
+    }
+
+    if (
+      event.key === "/" &&
+      !activeModalId &&
+      document.activeElement !== els.searchInput &&
+      !(document.activeElement instanceof HTMLInputElement) &&
+      !(document.activeElement instanceof HTMLTextAreaElement)
+    ) {
+      event.preventDefault();
+      els.searchInput.focus();
+      els.searchInput.select();
     }
   });
 
-  // Extension Host からのライブデータ受信
+  // Extension Host からのメッセージ受信
   window.addEventListener("message", (event) => {
     const msg = event.data;
-    if (msg && msg.type === "statsUpdate" && msg.payload) {
-      applyIncomingPayload(msg.payload);
+    if (!msg) return;
+
+    switch (msg.type) {
+      case "statsUpdate":
+        if (msg.payload) {
+          applyIncomingPayload(msg.payload);
+        }
+        break;
+
+      case "navigate":
+        if (msg.mode === "global" || msg.mode === "session") {
+          state.mode = msg.mode;
+          persistState();
+          renderAll();
+        }
+        if (msg.modal) {
+          openModal(msg.modal);
+        }
+        break;
+
+      case "exportDirPicked":
+        if (typeof msg.dirPath === "string") {
+          appData.lastExportDir = msg.dirPath;
+          els.exportDirInput.value = msg.dirPath;
+          els.exportModalError.classList.add("hidden");
+          updateExportPathPreview();
+        }
+        break;
+
+      case "exportSessionResult":
+        isSubmittingExport = false;
+        els.btnExecExportKeep.disabled = false;
+        els.btnExecExportReset.disabled = false;
+
+        if (!msg.ok) {
+          els.exportModalError.textContent =
+            msg.error || "保存中にエラーが発生しました。";
+          els.exportModalError.classList.remove("hidden");
+          break;
+        }
+
+        closeModal();
+        {
+          const count = Array.isArray(msg.savedFiles)
+            ? msg.savedFiles.length
+            : 0;
+          const resetSuffix = msg.resetPerformed
+            ? "（セッションをリセットしました）"
+            : "";
+          const actions = [];
+          if (msg.outputDirPath) {
+            actions.push({
+              label: "📂 保存フォルダを表示",
+              onClick: () =>
+                vscode.postMessage({
+                  command: "openExportedPath",
+                  filePath: msg.outputDirPath,
+                  revealInOs: true,
+                }),
+            });
+          }
+          if (msg.primaryFilePath) {
+            actions.push({
+              label: "📄 ファイルを開く",
+              onClick: () =>
+                vscode.postMessage({
+                  command: "openExportedPath",
+                  filePath: msg.primaryFilePath,
+                  revealInOs: false,
+                }),
+            });
+          }
+          showToast(
+            `${count} 件のセッションファイルを保存しました${resetSuffix}`,
+            "success",
+            actions,
+          );
+        }
+        break;
+
+      case "importFileLoaded":
+        if (typeof msg.content === "string") {
+          els.importJsonTextarea.value = msg.content;
+          els.importModalError.classList.add("hidden");
+          if (msg.fileName) {
+            els.importFileBadge.textContent = `読み込み元: ${msg.fileName}`;
+            els.importFileBadge.classList.remove("hidden");
+          }
+        }
+        break;
+
+      case "importJsonResult":
+        if (!msg.ok) {
+          els.importModalError.textContent =
+            msg.error || "インポートに失敗しました。";
+          els.importModalError.classList.remove("hidden");
+          break;
+        }
+        closeModal();
+        els.importJsonTextarea.value = "";
+        showToast(
+          `統計データをインポートしました（${msg.addedKeysCount} 項目 / 計 ${Number(msg.addedTotalCount || 0).toLocaleString()} 回を加算）`,
+          "success",
+        );
+        break;
+
+      case "toast":
+        if (msg.message) {
+          showToast(msg.message, msg.kind || "info");
+        }
+        break;
     }
   });
 

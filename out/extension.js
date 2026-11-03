@@ -13,6 +13,10 @@ let activeStore;
 function activate(context) {
     const store = new statsStore_1.StatsStore(context);
     activeStore = store;
+    // 起動完了後の次ティックで、前回計測中だったセッションの再開時刻補正を非同期で行う（activate自体は0msで完了）
+    setImmediate(() => {
+        store.initializeBackgroundSessionState();
+    });
     let actionsModulePromise;
     const loadActions = () => {
         if (!actionsModulePromise) {
@@ -41,6 +45,6 @@ function activate(context) {
     context.subscriptions.push(trackAndRun, registerLazyCommand("myTracker.showStats", (m) => m.showStatsAction), registerLazyCommand("myTracker.copyStatsTsv", (m) => m.copyStatsTsvAction), registerLazyCommand("myTracker.copyStatsJson", (m) => m.copyStatsJsonAction), registerLazyCommand("myTracker.importStatsJson", (m) => m.importStatsJsonAction), registerLazyCommand("myTracker.resetStats", (m) => m.resetStatsAction), registerLazyCommand("myTracker.startSession", (m) => m.startSessionAction), registerLazyCommand("myTracker.stopSession", (m) => m.stopSessionAction), registerLazyCommand("myTracker.resetSession", (m) => m.resetSessionAction), registerLazyCommand("myTracker.copySessionJson", (m) => m.copySessionJsonAction), registerLazyCommand("myTracker.copySessionTsv", (m) => m.copySessionTsvAction), registerLazyCommand("myTracker.copyKeybindingsDiffJson", (m) => m.copyKeybindingsDiffJsonAction), registerLazyCommand("myTracker.exportSessionToDirectory", (m) => m.exportSessionToDirectoryAction));
 }
 function deactivate() {
-    return activeStore?.flush();
+    return activeStore?.shutdown();
 }
 //# sourceMappingURL=extension.js.map

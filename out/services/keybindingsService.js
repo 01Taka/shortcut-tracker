@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getUserKeybindingsUri = getUserKeybindingsUri;
 exports.readCurrentKeybindings = readCurrentKeybindings;
 exports.calculateKeybindingsDiff = calculateKeybindingsDiff;
-exports.saveDiffToFile = saveDiffToFile;
+exports.syncSessionKeybindingsDiff = syncSessionKeybindingsDiff;
 const path = require("path");
 const vscode = require("vscode");
 const jsonc_1 = require("../utils/jsonc");
@@ -36,7 +36,6 @@ function getUserKeybindingsUri() {
         }
     }
     else {
-        // Linux
         const configHome = process.env.XDG_CONFIG_HOME ||
             (process.env.HOME ? path.join(process.env.HOME, ".config") : undefined);
         if (configHome) {
@@ -91,7 +90,6 @@ function getExactSignature(item) {
 function calculateKeybindingsDiff(initialItems, currentItems) {
     const initialLen = initialItems.length;
     const currentLen = currentItems.length;
-    // 1. 完全一致照合用のシグネチャインデックスを O(N) で構築
     const sigBuckets = new Map();
     for (let iIdx = 0; iIdx < initialLen; iIdx++) {
         const sig = getExactSignature(initialItems[iIdx]);
@@ -115,7 +113,6 @@ function calculateKeybindingsDiff(initialItems, currentItems) {
             matchedInitial[iIdx] = 1;
         }
     }
-    // 2. 未一致の initial 要素から正規化キーごとのインデックスを O(N) で構築
     const keyBuckets = new Map();
     for (let iIdx = 0; iIdx < initialLen; iIdx++) {
         if (matchedInitial[iIdx]) {
@@ -138,7 +135,6 @@ function calculateKeybindingsDiff(initialItems, currentItems) {
     let addedCount = 0;
     let removedCount = 0;
     let modifiedCount = 0;
-    // 3. modified（同じキーを持つ変更）を先に照合し、未一致の current 要素を記録
     const addedIndices = [];
     for (let cIdx = 0; cIdx < currentLen; cIdx++) {
         if (matchedCurrent[cIdx]) {
@@ -169,7 +165,6 @@ function calculateKeybindingsDiff(initialItems, currentItems) {
             addedIndices.push(cIdx);
         }
     }
-    // 4. 残りの unmatchedCurrent は added
     for (let k = 0; k < addedIndices.length; k++) {
         const cItem = currentItems[addedIndices[k]];
         addedCount++;
@@ -181,7 +176,6 @@ function calculateKeybindingsDiff(initialItems, currentItems) {
             args: cItem.args,
         });
     }
-    // 5. 残りの unmatchedInitial は removed
     for (let iIdx = 0; iIdx < initialLen; iIdx++) {
         if (!matchedInitial[iIdx]) {
             const iItem = initialItems[iIdx];
@@ -206,46 +200,22 @@ function calculateKeybindingsDiff(initialItems, currentItems) {
     };
 }
 /**
- * 差分結果をワークスペース内の shortcuts-log ディレクトリなどにJSONファイルとして保存
+ * セッションに初期キーバインドスナップショットが存在する場合、現在の keybindings.json との差分を自動同期する
+ * （ワークスペースへの勝手なファイル書き出しは行わず、メモリ/状態のみを更新）
  */
-async function saveDiffToFile(diff, sessionData) {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) {
+async function syncSessionKeybindingsDiff(store) {
+    const initialKb = await store.getInitialKeybindings();
+    if (!initialKb || initialKb.length === 0) {
         return undefined;
     }
-    const root = folders[0].uri;
-    const shortcutsLogDir = vscode.Uri.joinPath(root, "shortcuts-log");
-    let targetDir = root;
-    try {
-        await vscode.workspace.fs.stat(shortcutsLogDir);
-        targetDir = shortcutsLogDir;
+    const currentKb = await readCurrentKeybindings();
+    if (!currentKb || !currentKb.items) {
+        return store.getSessionData().keybindingsDiff;
     }
-    catch {
-        targetDir = root;
-    }
-    const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const fileUri = vscode.Uri.joinPath(targetDir, `session-diff-${dateStr}.json`);
-    const payload = {
-        version: 2,
-        type: "sessionKeybindingsDiff",
-        calculatedAt: diff.calculatedAt,
-        session: {
-            startedAt: sessionData.startedAt,
-            stoppedAt: sessionData.stoppedAt,
-            durationMs: sessionData.accumulatedMs,
-        },
-        summary: {
-            initialKeybindingsCount: diff.initialCount,
-            currentKeybindingsCount: diff.currentCount,
-            addedCount: diff.addedCount,
-            removedCount: diff.removedCount,
-            modifiedCount: diff.modifiedCount,
-            totalChanges: diff.diffs.length,
-        },
-        diffs: diff.diffs,
-    };
-    const bytes = new TextEncoder().encode(JSON.stringify(payload, null, 2));
-    await vscode.workspace.fs.writeFile(fileUri, bytes);
-    return fileUri;
+    const diff = calculateKeybindingsDiff(initialKb, currentKb.items);
+    const sessionData = store.getSessionData();
+    sessionData.keybindingsDiff = diff;
+    await store.saveSessionData(sessionData);
+    return diff;
 }
 //# sourceMappingURL=keybindingsService.js.map

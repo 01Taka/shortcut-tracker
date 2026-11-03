@@ -39,6 +39,7 @@ export interface ExportDataV2 {
   exportedAt: string;
   byExtension: StatsByExtension;
   session?: {
+    name?: string;
     startedAt?: string;
     stoppedAt?: string;
     durationMs: number;
@@ -49,10 +50,12 @@ export interface ExportDataV2 {
 
 export interface SessionData {
   isActive: boolean;
+  name?: string;
   startedAt?: string;
   stoppedAt?: string;
   accumulatedMs: number;
   lastStartedAt?: string;
+  lastHeartbeatAt?: string;
   statsByExt: StatsByExtension;
   /**
    * @deprecated 新バージョンでは globalState 肥大化を防ぐため globalStorageUri 配下のファイルに保存。
@@ -62,3 +65,21 @@ export interface SessionData {
   initialKeybindingsCount?: number;
   keybindingsDiff?: KeybindingsDiffResult;
 }
+
+export interface SessionExportOptions {
+  dirPath: string;
+  sessionName?: string;
+  createSubdirectory: boolean;
+  includeStatsJson: boolean;
+  includeStatsTsv: boolean;
+  includeDiffJson: boolean;
+  includeInitialKb: boolean;
+  includeCurrentKb: boolean;
+  resetAfterSave: boolean;
+}
+
+export type WebviewModalTarget =
+  | "exportSession"
+  | "importJson"
+  | "resetSession"
+  | "resetGlobal";
