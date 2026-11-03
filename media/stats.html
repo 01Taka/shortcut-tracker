@@ -247,6 +247,77 @@
       font-size: 12px;
       color: var(--vscode-descriptionForeground);
     }
+    .session-banner {
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border, #444);
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .session-banner-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-badge.active {
+      background: rgba(78, 201, 176, 0.2);
+      color: #4ec9b0;
+      border: 1px solid rgba(78, 201, 176, 0.4);
+    }
+    .status-badge.inactive {
+      background: rgba(128, 128, 128, 0.2);
+      color: var(--vscode-descriptionForeground);
+      border: 1px solid rgba(128, 128, 128, 0.4);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .session-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .session-stat-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .session-stat-label {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .session-stat-value {
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .session-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .action-btn.primary-btn {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .action-btn.primary-btn:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
   </style>
 </head>
 <body>
@@ -281,6 +352,7 @@
       <button id="btn-tab-compare" class="tab-btn active" onclick="showTab('tab-compare', this)">比較ビュー</button>
       <button id="btn-tab-raw" class="tab-btn" onclick="showTab('tab-raw', this)">現行の統計 (全入力)</button>
       <button id="btn-tab-dedup" class="tab-btn" onclick="showTab('tab-dedup', this)">連続除外統計 (非連続)</button>
+      <button id="btn-tab-session" class="tab-btn" onclick="showTab('tab-session', this)">⏱️ セッション統計</button>
     </div>
     <div class="data-actions">
       <span class="action-group-label">データ:</span>
@@ -353,6 +425,59 @@
     </table>
   </div>
 
+  <div id="tab-session" class="tab-content">
+    <div class="session-banner">
+      <div class="session-banner-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h3 style="margin: 0; font-size: 15px;">⏱️ セッション計測 (特定期間の追跡)</h3>
+          {{SESSION_STATUS_BADGE}}
+        </div>
+        <div class="session-controls">
+          {{SESSION_TOGGLE_BTN}}
+          <button class="action-btn danger-btn" onclick="resetSession()">🔄 リセット</button>
+          <button class="action-btn" onclick="copySessionTsv()">📊 TSVコピー</button>
+          <button class="action-btn" onclick="copySessionJson()">📋 JSONコピー</button>
+        </div>
+      </div>
+      <div class="session-stats-grid">
+        <div class="session-stat-item">
+          <span class="session-stat-label">計測開始日時</span>
+          <span class="session-stat-value">{{SESSION_STARTED_AT}}</span>
+        </div>
+        <div class="session-stat-item">
+          <span class="session-stat-label">計測時間</span>
+          <span class="session-stat-value">{{SESSION_DURATION}}</span>
+        </div>
+        <div class="session-stat-item">
+          <span class="session-stat-label">総入力回数</span>
+          <span class="session-stat-value">{{SESSION_TOTAL_INPUTS}} 回</span>
+        </div>
+        <div class="session-stat-item">
+          <span class="session-stat-label">非連続入力回数</span>
+          <span class="session-stat-value">{{SESSION_NON_CONSECUTIVE}} 回</span>
+        </div>
+        <div class="session-stat-item">
+          <span class="session-stat-label">連続リピート率</span>
+          <span class="session-stat-value">{{SESSION_REPEAT_RATE}}%</span>
+        </div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>キーバインド</th>
+          <th style="text-align: right;">現行統計 (全入力)</th>
+          <th style="text-align: right;">連続除外統計 (非連続)</th>
+          <th style="text-align: right;">連続リピート率</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{SESSION_ROWS}}
+      </tbody>
+    </table>
+  </div>
+
   <div class="footer-info">
     直前の入力キー: <code>{{LAST_KEY}}</code>
   </div>
@@ -381,6 +506,26 @@
 
     function resetStats() {
       vscode.postMessage({ command: 'reset' });
+    }
+
+    function startSession() {
+      vscode.postMessage({ command: 'startSession' });
+    }
+
+    function stopSession() {
+      vscode.postMessage({ command: 'stopSession' });
+    }
+
+    function resetSession() {
+      vscode.postMessage({ command: 'resetSession' });
+    }
+
+    function copySessionTsv() {
+      vscode.postMessage({ command: 'copySessionTsv' });
+    }
+
+    function copySessionJson() {
+      vscode.postMessage({ command: 'copySessionJson' });
     }
 
     function showTab(tabId, btn) {

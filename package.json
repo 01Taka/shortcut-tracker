@@ -34,6 +34,26 @@
       {
         "command": "myTracker.resetStats",
         "title": "ShortcutStatus Reset Statistics"
+      },
+      {
+        "command": "myTracker.startSession",
+        "title": "ShortcutStatus Start Session Tracking (特定期間の計測開始/再開)"
+      },
+      {
+        "command": "myTracker.stopSession",
+        "title": "ShortcutStatus Stop Session Tracking (特定期間の計測停止)"
+      },
+      {
+        "command": "myTracker.resetSession",
+        "title": "ShortcutStatus Reset Session Tracking (セッション計測のリセット)"
+      },
+      {
+        "command": "myTracker.copySessionJson",
+        "title": "ShortcutStatus Copy Session Statistics as JSON"
+      },
+      {
+        "command": "myTracker.copySessionTsv",
+        "title": "ShortcutStatus Copy Session Statistics as TSV"
       }
     ]
   },
