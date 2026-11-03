@@ -1,0 +1,13 @@
+.vscode/**
+.vscode-test/**
+src/**
+out/**/*.map
+node_modules/**
+shortcuts-log/**
+*.vsix
+*.jsonc
+extract-group-commands.js
+unwrap-keybindings.js
+group-commands.json
+tsconfig.json
+.gitignore

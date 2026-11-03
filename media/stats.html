@@ -645,7 +645,7 @@
       const activeContent = document.getElementById(currentActiveTab);
       if (!activeContent) return;
 
-      const table = activeContent.querySelector('table');
+      const table = activeContent.querySelector(':scope > table') || activeContent.querySelector('table');
       if (!table) return;
 
       const rows = table.querySelectorAll('tbody tr:not(.no-filter-result)');

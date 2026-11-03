@@ -10,11 +10,15 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "*"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "myTracker.trackAndRun",
+        "title": "ShortcutStatus Track and Run"
+      },
       {
         "command": "myTracker.showStats",
         "title": "ShortcutStatus Show Statistics"
@@ -63,7 +67,15 @@
         "command": "myTracker.exportSessionToDirectory",
         "title": "ShortcutStatus Export Session Statistics to Local Directory"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "myTracker.trackAndRun",
+          "when": "false"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
