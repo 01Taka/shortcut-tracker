@@ -18,6 +18,7 @@ import {
 export async function showStatsAction(store: StatsStore): Promise<void> {
   await openOrRevealStatsPanel(store, {
     onCopyTsvFallback: async (tabType?: string) => {
+      await store.syncFromDisk();
       let targetType: "unified" | "raw" | "dedup" | "all" = "unified";
       if (tabType === "tab-raw") {
         targetType = "raw";
@@ -34,10 +35,12 @@ export async function showStatsAction(store: StatsStore): Promise<void> {
 }
 
 export async function copyStatsTsvAction(store: StatsStore): Promise<void> {
+  await store.syncFromDisk();
   await copyTsvQuickPickAction(store.getStatsByExt(), "メイン統計");
 }
 
 export async function copyStatsJsonAction(store: StatsStore): Promise<void> {
+  await store.syncFromDisk();
   const payload: ExportDataV2 = {
     version: 2,
     exportedAt: new Date().toISOString(),
@@ -124,6 +127,7 @@ export async function resetSessionAction(store: StatsStore): Promise<void> {
 }
 
 export async function copySessionJsonAction(store: StatsStore): Promise<void> {
+  await store.syncFromDisk();
   await syncSessionKeybindingsDiff(store);
   const sessionData = store.getSessionData();
   const durationMs = calculateSessionDurationMs(sessionData);
@@ -151,6 +155,7 @@ export async function copySessionJsonAction(store: StatsStore): Promise<void> {
 }
 
 export async function copySessionTsvAction(store: StatsStore): Promise<void> {
+  await store.syncFromDisk();
   const sessionData = store.getSessionData();
   await copyTsvQuickPickAction(sessionData.statsByExt, "セッション統計");
 }

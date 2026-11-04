@@ -42,7 +42,14 @@ function activate(context) {
         const mod = await loadActions();
         await pickHandler(mod)(store);
     });
-    context.subscriptions.push(trackAndRun, registerLazyCommand("myTracker.showStats", (m) => m.showStatsAction), registerLazyCommand("myTracker.copyStatsTsv", (m) => m.copyStatsTsvAction), registerLazyCommand("myTracker.copyStatsJson", (m) => m.copyStatsJsonAction), registerLazyCommand("myTracker.importStatsJson", (m) => m.importStatsJsonAction), registerLazyCommand("myTracker.resetStats", (m) => m.resetStatsAction), registerLazyCommand("myTracker.startSession", (m) => m.startSessionAction), registerLazyCommand("myTracker.stopSession", (m) => m.stopSessionAction), registerLazyCommand("myTracker.resetSession", (m) => m.resetSessionAction), registerLazyCommand("myTracker.copySessionJson", (m) => m.copySessionJsonAction), registerLazyCommand("myTracker.copySessionTsv", (m) => m.copySessionTsvAction), registerLazyCommand("myTracker.copyKeybindingsDiffJson", (m) => m.copyKeybindingsDiffJsonAction), registerLazyCommand("myTracker.exportSessionToDirectory", (m) => m.exportSessionToDirectoryAction));
+    context.subscriptions.push(vscode.window.onDidChangeWindowState((e) => {
+        if (e.focused) {
+            void store.syncFromDisk();
+        }
+        else {
+            void store.flush();
+        }
+    }), trackAndRun, registerLazyCommand("myTracker.showStats", (m) => m.showStatsAction), registerLazyCommand("myTracker.copyStatsTsv", (m) => m.copyStatsTsvAction), registerLazyCommand("myTracker.copyStatsJson", (m) => m.copyStatsJsonAction), registerLazyCommand("myTracker.importStatsJson", (m) => m.importStatsJsonAction), registerLazyCommand("myTracker.resetStats", (m) => m.resetStatsAction), registerLazyCommand("myTracker.startSession", (m) => m.startSessionAction), registerLazyCommand("myTracker.stopSession", (m) => m.stopSessionAction), registerLazyCommand("myTracker.resetSession", (m) => m.resetSessionAction), registerLazyCommand("myTracker.copySessionJson", (m) => m.copySessionJsonAction), registerLazyCommand("myTracker.copySessionTsv", (m) => m.copySessionTsvAction), registerLazyCommand("myTracker.copyKeybindingsDiffJson", (m) => m.copyKeybindingsDiffJsonAction), registerLazyCommand("myTracker.exportSessionToDirectory", (m) => m.exportSessionToDirectoryAction));
 }
 function deactivate() {
     return activeStore?.shutdown();

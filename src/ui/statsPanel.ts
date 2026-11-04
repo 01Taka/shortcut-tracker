@@ -86,6 +86,8 @@ export async function openOrRevealStatsPanel(
   store: StatsStore,
   options?: OpenPanelOptions,
 ): Promise<void> {
+  await store.syncFromDisk();
+
   // パネル表示前に初期スナップショットがある場合は最新差分を自動同期
   if (store.getSessionData().initialKeybindingsCount) {
     void syncSessionKeybindingsDiff(store);
@@ -173,12 +175,14 @@ export async function openOrRevealStatsPanel(
   panel.onDidChangeViewState(
     (e) => {
       if (e.webviewPanel.visible) {
-        if (pendingPushWhileHidden) {
-          pushNow();
-        }
-        if (store.getSessionData().initialKeybindingsCount) {
-          void syncSessionKeybindingsDiff(store);
-        }
+        void store.syncFromDisk().then(() => {
+          if (pendingPushWhileHidden) {
+            pushNow();
+          }
+          if (store.getSessionData().initialKeybindingsCount) {
+            void syncSessionKeybindingsDiff(store);
+          }
+        });
       }
     },
     null,
@@ -235,6 +239,7 @@ export async function openOrRevealStatsPanel(
         }
 
         case "refresh": {
+          await store.syncFromDisk();
           await syncSessionKeybindingsDiff(store);
           await refreshStatsPanel(store);
           await panel.webview.postMessage({

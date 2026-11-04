@@ -213,9 +213,7 @@ async function syncSessionKeybindingsDiff(store) {
         return store.getSessionData().keybindingsDiff;
     }
     const diff = calculateKeybindingsDiff(initialKb, currentKb.items);
-    const sessionData = store.getSessionData();
-    sessionData.keybindingsDiff = diff;
-    await store.saveSessionData(sessionData);
+    await store.updateSessionState({ keybindingsDiff: diff });
     return diff;
 }
 //# sourceMappingURL=keybindingsService.js.map

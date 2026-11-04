@@ -1,6 +1,7 @@
+import * as crypto from "crypto";
 import * as vscode from "vscode";
 import type { StatsStore } from "../store/statsStore";
-import type { SessionExportOptions } from "../types";
+import type { SessionExportOptions, StatsByExtension } from "../types";
 import { parseJsonc } from "../utils/jsonc";
 import {
   aggregateStats,
@@ -30,6 +31,8 @@ export async function startOrResumeSession(
   store: StatsStore,
   sessionName?: string,
 ): Promise<StartSessionResult> {
+  await store.syncFromDisk();
+
   const sessionData = store.getSessionData();
   if (sessionData.isActive) {
     return { alreadyActive: true, isNewSession: false };
@@ -38,32 +41,36 @@ export async function startOrResumeSession(
   const isNewSession = !sessionData.startedAt;
   const nowIso = new Date().toISOString();
 
+  let nextName = sessionData.name;
   if (sessionName !== undefined) {
     const trimmed = sessionName.trim();
-    sessionData.name = trimmed.length > 0 ? trimmed : sessionData.name;
+    nextName = trimmed.length > 0 ? trimmed : sessionData.name;
   }
 
-  if (isNewSession) {
-    sessionData.startedAt = nowIso;
-    sessionData.keybindingsDiff = undefined;
-  }
-
-  sessionData.isActive = true;
-  sessionData.lastStartedAt = nowIso;
-  sessionData.lastHeartbeatAt = nowIso;
-  sessionData.stoppedAt = undefined;
-
-  // まず計測開始状態を即時反映
-  await store.saveSessionData(sessionData);
+  // まず計測開始状態を即時反映（statsByExt を上書きしない部分更新）
+  await store.updateSessionState({
+    sessionId: isNewSession
+      ? crypto.randomUUID()
+      : (sessionData.sessionId ?? nowIso),
+    name: nextName ?? null,
+    startedAt: isNewSession ? nowIso : (sessionData.startedAt ?? nowIso),
+    keybindingsDiff: isNewSession
+      ? null
+      : (sessionData.keybindingsDiff ?? null),
+    isActive: true,
+    lastStartedAt: nowIso,
+    lastHeartbeatAt: nowIso,
+    stoppedAt: null,
+  });
 
   // 新規開始（または未保存）の場合のみ初期キーバインドを自動取得
-  let snapshotCount = sessionData.initialKeybindingsCount;
-  if (isNewSession || !sessionData.initialKeybindingsCount) {
+  let snapshotCount = store.getSessionData().initialKeybindingsCount;
+  if (isNewSession || !snapshotCount) {
     const kbInfo = await readCurrentKeybindings();
     if (kbInfo && kbInfo.items.length > 0) {
       await store.setInitialKeybindings(kbInfo.items);
       snapshotCount = kbInfo.items.length;
-      await store.saveSessionData(store.getSessionData());
+      await store.flush();
     }
   } else {
     // 再開時は現在の差分状態だけ最新化しておく
@@ -81,26 +88,29 @@ export async function startOrResumeSession(
  * セッション計測を一時停止し、最新キーバインド差分を自動同期する（ポップアップなし）
  */
 export async function pauseSession(store: StatsStore): Promise<boolean> {
+  await store.syncFromDisk();
+
   const sessionData = store.getSessionData();
   if (!sessionData.isActive) {
     return false;
   }
 
   const nowMs = Date.now();
+  let accumulatedMs = sessionData.accumulatedMs || 0;
   if (sessionData.lastStartedAt) {
     const startMs = new Date(sessionData.lastStartedAt).getTime();
     if (!isNaN(startMs)) {
-      sessionData.accumulatedMs =
-        (sessionData.accumulatedMs || 0) + Math.max(0, nowMs - startMs);
+      accumulatedMs += Math.max(0, nowMs - startMs);
     }
   }
 
-  sessionData.isActive = false;
-  sessionData.lastStartedAt = undefined;
-  sessionData.lastHeartbeatAt = undefined;
-  sessionData.stoppedAt = new Date().toISOString();
-
-  await store.saveSessionData(sessionData);
+  await store.updateSessionState({
+    isActive: false,
+    accumulatedMs,
+    lastStartedAt: null,
+    lastHeartbeatAt: null,
+    stoppedAt: new Date(nowMs).toISOString(),
+  });
   await syncSessionKeybindingsDiff(store);
   return true;
 }
@@ -133,6 +143,10 @@ export async function executeSessionExport(
   ) {
     throw new Error("保存するファイルを1つ以上選択してください。");
   }
+
+  // 自ウィンドウの未保存分をフラッシュし、他ウィンドウの最新状態を同期
+  await store.flush();
+  await store.syncFromDisk();
 
   // セッション名の反映と最新キーバインド差分の同期
   if (options.sessionName !== undefined) {
@@ -351,7 +365,7 @@ export async function importStatsFromText(
     throw new Error("統計データのオブジェクト形式が不正です。");
   }
 
-  const statsByExt = store.getStatsByExt();
+  const importedDelta: StatsByExtension = {};
   let addedTotalCount = 0;
   let addedKeysCount = 0;
 
@@ -361,8 +375,8 @@ export async function importStatsFromText(
     importedNonConsecutive: Record<string, any>,
     importedSequence?: Record<string, any>,
   ) => {
-    if (!statsByExt[extName]) {
-      statsByExt[extName] = {
+    if (!importedDelta[extName]) {
+      importedDelta[extName] = {
         shortcutStats: {},
         shortcutStatsNonConsecutive: {},
         sequenceStats: {},
@@ -373,8 +387,8 @@ export async function importStatsFromText(
       const num = Number(val);
       if (!isNaN(num) && num > 0) {
         const count = Math.round(num);
-        statsByExt[extName].shortcutStats[key] =
-          (statsByExt[extName].shortcutStats[key] || 0) + count;
+        importedDelta[extName].shortcutStats[key] =
+          (importedDelta[extName].shortcutStats[key] || 0) + count;
         addedTotalCount += count;
         addedKeysCount++;
       }
@@ -384,21 +398,21 @@ export async function importStatsFromText(
       const num = Number(val);
       if (!isNaN(num) && num > 0) {
         const count = Math.round(num);
-        statsByExt[extName].shortcutStatsNonConsecutive[key] =
-          (statsByExt[extName].shortcutStatsNonConsecutive[key] || 0) + count;
+        importedDelta[extName].shortcutStatsNonConsecutive[key] =
+          (importedDelta[extName].shortcutStatsNonConsecutive[key] || 0) + count;
       }
     }
 
     if (importedSequence && typeof importedSequence === "object") {
-      if (!statsByExt[extName].sequenceStats) {
-        statsByExt[extName].sequenceStats = {};
+      if (!importedDelta[extName].sequenceStats) {
+        importedDelta[extName].sequenceStats = {};
       }
       for (const [key, val] of Object.entries(importedSequence)) {
         const num = Number(val);
         if (!isNaN(num) && num > 0) {
           const count = Math.round(num);
-          statsByExt[extName].sequenceStats![key] =
-            (statsByExt[extName].sequenceStats![key] || 0) + count;
+          importedDelta[extName].sequenceStats![key] =
+            (importedDelta[extName].sequenceStats![key] || 0) + count;
         }
       }
     }
@@ -434,6 +448,6 @@ export async function importStatsFromText(
     throw new Error("インポート可能な正の数値データが見つかりませんでした。");
   }
 
-  await store.markStatsModified();
+  await store.addImportedStats(importedDelta);
   return { addedKeysCount, addedTotalCount };
 }

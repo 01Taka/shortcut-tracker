@@ -43,6 +43,7 @@ async function refreshStatsPanel(store) {
     });
 }
 async function openOrRevealStatsPanel(store, options) {
+    await store.syncFromDisk();
     // パネル表示前に初期スナップショットがある場合は最新差分を自動同期
     if (store.getSessionData().initialKeybindingsCount) {
         void (0, keybindingsService_1.syncSessionKeybindingsDiff)(store);
@@ -113,12 +114,14 @@ async function openOrRevealStatsPanel(store, options) {
     }
     panel.onDidChangeViewState((e) => {
         if (e.webviewPanel.visible) {
-            if (pendingPushWhileHidden) {
-                pushNow();
-            }
-            if (store.getSessionData().initialKeybindingsCount) {
-                void (0, keybindingsService_1.syncSessionKeybindingsDiff)(store);
-            }
+            void store.syncFromDisk().then(() => {
+                if (pendingPushWhileHidden) {
+                    pushNow();
+                }
+                if (store.getSessionData().initialKeybindingsCount) {
+                    void (0, keybindingsService_1.syncSessionKeybindingsDiff)(store);
+                }
+            });
         }
     }, null, panelDisposables);
     panel.onDidDispose(() => {
@@ -163,6 +166,7 @@ async function openOrRevealStatsPanel(store, options) {
                 break;
             }
             case "refresh": {
+                await store.syncFromDisk();
                 await (0, keybindingsService_1.syncSessionKeybindingsDiff)(store);
                 await refreshStatsPanel(store);
                 await panel.webview.postMessage({

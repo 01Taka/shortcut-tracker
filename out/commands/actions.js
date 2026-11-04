@@ -20,6 +20,7 @@ const statsFormat_1 = require("../utils/statsFormat");
 async function showStatsAction(store) {
     await (0, statsPanel_1.openOrRevealStatsPanel)(store, {
         onCopyTsvFallback: async (tabType) => {
+            await store.syncFromDisk();
             let targetType = "unified";
             if (tabType === "tab-raw") {
                 targetType = "raw";
@@ -32,9 +33,11 @@ async function showStatsAction(store) {
     });
 }
 async function copyStatsTsvAction(store) {
+    await store.syncFromDisk();
     await copyTsvQuickPickAction(store.getStatsByExt(), "メイン統計");
 }
 async function copyStatsJsonAction(store) {
+    await store.syncFromDisk();
     const payload = {
         version: 2,
         exportedAt: new Date().toISOString(),
@@ -101,6 +104,7 @@ async function resetSessionAction(store) {
     });
 }
 async function copySessionJsonAction(store) {
+    await store.syncFromDisk();
     await (0, keybindingsService_1.syncSessionKeybindingsDiff)(store);
     const sessionData = store.getSessionData();
     const durationMs = (0, statsFormat_1.calculateSessionDurationMs)(sessionData);
@@ -122,6 +126,7 @@ async function copySessionJsonAction(store) {
     vscode.window.setStatusBarMessage("セッション統計データをJSON形式でコピーしました", 3500);
 }
 async function copySessionTsvAction(store) {
+    await store.syncFromDisk();
     const sessionData = store.getSessionData();
     await copyTsvQuickPickAction(sessionData.statsByExt, "セッション統計");
 }

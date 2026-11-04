@@ -50,6 +50,7 @@ export interface ExportDataV2 {
 }
 
 export interface SessionData {
+  sessionId?: string;
   isActive: boolean;
   name?: string;
   startedAt?: string;

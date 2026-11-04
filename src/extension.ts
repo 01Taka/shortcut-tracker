@@ -71,6 +71,13 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
   context.subscriptions.push(
+    vscode.window.onDidChangeWindowState((e) => {
+      if (e.focused) {
+        void store.syncFromDisk();
+      } else {
+        void store.flush();
+      }
+    }),
     trackAndRun,
     registerLazyCommand("myTracker.showStats", (m) => m.showStatsAction),
     registerLazyCommand("myTracker.copyStatsTsv", (m) => m.copyStatsTsvAction),
