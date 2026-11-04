@@ -181,6 +181,11 @@ async function copyTsvQuickPickAction(statsByExt, scopeName = "統計", targetTy
                 value: "unified",
             },
             {
+                label: "キーの組み合わせ (遷移統計)",
+                description: "キーの組み合わせ / 回数 / パーセント",
+                value: "sequence",
+            },
+            {
                 label: "現行の統計 (全入力のみ)",
                 description: "キー / 回数 / パーセント",
                 value: "raw",
@@ -208,6 +213,10 @@ async function copyTsvQuickPickAction(statsByExt, scopeName = "統計", targetTy
     if (selectedType === "unified") {
         tsv = (0, statsFormat_1.formatUnifiedTsv)(aggregated);
         typeLabel = "統合TSV";
+    }
+    else if (selectedType === "sequence") {
+        tsv = (0, statsFormat_1.formatSequenceTsv)(aggregated.sequenceStats);
+        typeLabel = "キー組み合わせTSV";
     }
     else if (selectedType === "raw") {
         tsv = (0, statsFormat_1.formatTsv)(aggregated.totalStats);

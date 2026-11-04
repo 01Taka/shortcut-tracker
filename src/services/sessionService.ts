@@ -200,11 +200,13 @@ export async function executeSessionExport(
         nonConsecutiveInputs: sessionNonConsecutive,
         consecutiveInputs: sessionConsecutive,
         repeatRate: `${sessionRepeatRate}%`,
+        totalSequences: sessionAggregated.totalSequences,
         extensionsCount: Object.keys(sessionData.statsByExt).length,
       },
       byExtension: sessionData.statsByExt,
       totalStats: sessionAggregated.totalStats,
       nonConsecutiveStats: sessionAggregated.nonConsecutiveStats,
+      sequenceStats: sessionAggregated.sequenceStats,
       keybindingsDiff: sessionData.keybindingsDiff,
     };
 
@@ -357,11 +359,13 @@ export async function importStatsFromText(
     extName: string,
     importedTotal: Record<string, any>,
     importedNonConsecutive: Record<string, any>,
+    importedSequence?: Record<string, any>,
   ) => {
     if (!statsByExt[extName]) {
       statsByExt[extName] = {
         shortcutStats: {},
         shortcutStatsNonConsecutive: {},
+        sequenceStats: {},
       };
     }
 
@@ -384,6 +388,20 @@ export async function importStatsFromText(
           (statsByExt[extName].shortcutStatsNonConsecutive[key] || 0) + count;
       }
     }
+
+    if (importedSequence && typeof importedSequence === "object") {
+      if (!statsByExt[extName].sequenceStats) {
+        statsByExt[extName].sequenceStats = {};
+      }
+      for (const [key, val] of Object.entries(importedSequence)) {
+        const num = Number(val);
+        if (!isNaN(num) && num > 0) {
+          const count = Math.round(num);
+          statsByExt[extName].sequenceStats![key] =
+            (statsByExt[extName].sequenceStats![key] || 0) + count;
+        }
+      }
+    }
   };
 
   if (parsed.byExtension && typeof parsed.byExtension === "object") {
@@ -392,7 +410,8 @@ export async function importStatsFromText(
         const rawTotal = extData.shortcutStats || {};
         const rawNonConsecutive =
           extData.shortcutStatsNonConsecutive || rawTotal;
-        mergeExtensionStats(ext, rawTotal, rawNonConsecutive);
+        const rawSequence = extData.sequenceStats;
+        mergeExtensionStats(ext, rawTotal, rawNonConsecutive, rawSequence);
       }
     }
   } else if (
@@ -405,7 +424,8 @@ export async function importStatsFromText(
       typeof parsed.shortcutStatsNonConsecutive === "object"
         ? parsed.shortcutStatsNonConsecutive
         : parsed.shortcutStats;
-    mergeExtensionStats("(legacy)", rawTotal, rawNonConsecutive);
+    const rawSequence = parsed.sequenceStats;
+    mergeExtensionStats("(legacy)", rawTotal, rawNonConsecutive, rawSequence);
   } else {
     mergeExtensionStats("(legacy)", parsed, parsed);
   }

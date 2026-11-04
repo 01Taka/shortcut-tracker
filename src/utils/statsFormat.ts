@@ -3,8 +3,10 @@ import type { SessionData, StatsByExtension } from "../types";
 export interface AggregatedStats {
   totalStats: Record<string, number>;
   nonConsecutiveStats: Record<string, number>;
+  sequenceStats: Record<string, number>;
   totalInputs: number;
   totalNonConsecutive: number;
+  totalSequences: number;
 }
 
 export function calculateSessionDurationMs(sessionData: SessionData): number {
@@ -72,8 +74,10 @@ export function aggregateStats(
 ): AggregatedStats {
   const totalStats: Record<string, number> = {};
   const nonConsecutiveStats: Record<string, number> = {};
+  const sequenceStats: Record<string, number> = {};
   let totalInputs = 0;
   let totalNonConsecutive = 0;
+  let totalSequences = 0;
 
   const filterSet = filterExtensions ? new Set(filterExtensions) : undefined;
 
@@ -100,14 +104,47 @@ export function aggregateStats(
         totalNonConsecutive += count;
       }
     }
+    if (data.sequenceStats) {
+      for (const [seqKey, count] of Object.entries(data.sequenceStats)) {
+        sequenceStats[seqKey] = (sequenceStats[seqKey] || 0) + count;
+        totalSequences += count;
+      }
+    }
   }
 
   return {
     totalStats,
     nonConsecutiveStats,
+    sequenceStats,
     totalInputs,
     totalNonConsecutive,
+    totalSequences,
   };
+}
+
+export function formatSequenceTsv(
+  sequenceStats: Record<string, number>,
+): string {
+  const sorted = Object.entries(sequenceStats).sort((a, b) => b[1] - a[1]);
+  const header = "キーの組み合わせ\t回数\tパーセント";
+  if (sorted.length === 0) {
+    return header;
+  }
+
+  let total = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    total += sorted[i][1];
+  }
+
+  const rows = new Array<string>(sorted.length + 1);
+  rows[0] = header;
+  for (let i = 0; i < sorted.length; i++) {
+    const [key, count] = sorted[i];
+    const pct = total > 0 ? ((count / total) * 100).toFixed(1) : "0.0";
+    rows[i + 1] = `${key}\t${count}\t${pct}%`;
+  }
+
+  return rows.join("\n");
 }
 
 export function formatTsv(stats: Record<string, number>): string {

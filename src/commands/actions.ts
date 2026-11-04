@@ -10,6 +10,7 @@ import { openOrRevealStatsPanel, refreshStatsPanel } from "../ui/statsPanel";
 import {
   aggregateStats,
   calculateSessionDurationMs,
+  formatSequenceTsv,
   formatTsv,
   formatUnifiedTsv,
 } from "../utils/statsFormat";
@@ -190,7 +191,7 @@ export async function exportSessionToDirectoryAction(
 async function copyTsvQuickPickAction(
   statsByExt: StatsByExtension,
   scopeName: string = "統計",
-  targetType?: "unified" | "raw" | "dedup" | "all",
+  targetType?: "unified" | "raw" | "dedup" | "all" | "sequence",
 ): Promise<void> {
   const availableExts = Object.keys(statsByExt);
 
@@ -237,6 +238,11 @@ async function copyTsvQuickPickAction(
           value: "unified" as const,
         },
         {
+          label: "キーの組み合わせ (遷移統計)",
+          description: "キーの組み合わせ / 回数 / パーセント",
+          value: "sequence" as const,
+        },
+        {
           label: "現行の統計 (全入力のみ)",
           description: "キー / 回数 / パーセント",
           value: "raw" as const,
@@ -268,6 +274,9 @@ async function copyTsvQuickPickAction(
   if (selectedType === "unified") {
     tsv = formatUnifiedTsv(aggregated);
     typeLabel = "統合TSV";
+  } else if (selectedType === "sequence") {
+    tsv = formatSequenceTsv(aggregated.sequenceStats);
+    typeLabel = "キー組み合わせTSV";
   } else if (selectedType === "raw") {
     tsv = formatTsv(aggregated.totalStats);
     typeLabel = "全入力TSV";

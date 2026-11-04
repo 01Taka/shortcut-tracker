@@ -7,6 +7,7 @@ export interface TrackArgs {
 export interface ExtensionStats {
   shortcutStats: Record<string, number>;
   shortcutStatsNonConsecutive: Record<string, number>;
+  sequenceStats?: Record<string, number>;
 }
 
 export type StatsByExtension = Record<string, ExtensionStats>;

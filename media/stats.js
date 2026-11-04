@@ -7,6 +7,7 @@
   const savedState = vscode.getState() || {};
   const state = {
     mode: savedState.mode === "session" ? "session" : "global",
+    viewTab: savedState.viewTab === "sequence" ? "sequence" : "single",
     groupMode: savedState.groupMode === "key" ? "key" : "command",
     sortKey: savedState.sortKey || "total",
     sortDir: savedState.sortDir || "desc",
@@ -254,8 +255,10 @@
   function aggregateBySelectedExts(statsByExt, selectedExts) {
     const totalStats = {};
     const nonConsecutiveStats = {};
+    const sequenceStats = {};
     let totalInputs = 0;
     let totalNonConsecutive = 0;
+    let totalSequences = 0;
 
     const filterSet =
       selectedExts && selectedExts.length > 0 ? new Set(selectedExts) : null;
@@ -277,9 +280,22 @@
           totalNonConsecutive += c;
         }
       }
+      if (data.sequenceStats) {
+        for (const [k, c] of Object.entries(data.sequenceStats)) {
+          sequenceStats[k] = (sequenceStats[k] || 0) + c;
+          totalSequences += c;
+        }
+      }
     }
 
-    return { totalStats, nonConsecutiveStats, totalInputs, totalNonConsecutive };
+    return {
+      totalStats,
+      nonConsecutiveStats,
+      sequenceStats,
+      totalInputs,
+      totalNonConsecutive,
+      totalSequences,
+    };
   }
 
   function buildRankingRows(totalStats, nonConsecutiveStats, groupMode) {
@@ -379,6 +395,37 @@
     return groupedRows;
   }
 
+  function buildSequenceRankingRows(sequenceStats) {
+    const allSeqKeys = Object.keys(sequenceStats || {});
+    return allSeqKeys.map((seqKey) => {
+      const parts = seqKey.split(" -> ");
+      const fromRaw = parts[0] || "";
+      const toRaw = parts[1] || "";
+      const fromParsed = parseKeyEntry(fromRaw);
+      const toParsed = parseKeyEntry(toRaw);
+
+      const totalCount = sequenceStats[seqKey] || 0;
+      const isSameKey =
+        fromRaw === toRaw ||
+        fromParsed.shortcut.toLowerCase() === toParsed.shortcut.toLowerCase();
+      const seqType = isSameKey ? "same" : "diff";
+      const seqTypeLabel = isSameKey ? "同一キー連続" : "異なるキー遷移";
+
+      return {
+        id: `seq:${seqKey}`,
+        tsvKey: seqKey,
+        sortLabel: `${fromParsed.shortcut} ${toParsed.shortcut}`.toLowerCase(),
+        searchTarget: `${seqKey} ${fromParsed.shortcut} ${toParsed.shortcut} ${fromParsed.commandLabel} ${toParsed.commandLabel} ${seqTypeLabel}`.toLowerCase(),
+        fromParsed,
+        toParsed,
+        totalCount,
+        seqType,
+        seqTypeLabel,
+        children: [],
+      };
+    });
+  }
+
   function filterAndSortRows(rows) {
     const q = state.searchQuery.trim().toLowerCase();
     const filtered = q
@@ -392,18 +439,20 @@
       let cmp = 0;
       if (key === "key") {
         cmp = a.sortLabel.localeCompare(b.sortLabel);
+      } else if (key === "seqType") {
+        cmp = (a.seqType || "").localeCompare(b.seqType || "");
       } else if (key === "nonConsecutive") {
-        cmp = a.nonConsecutiveCount - b.nonConsecutiveCount;
+        cmp = (a.nonConsecutiveCount || 0) - (b.nonConsecutiveCount || 0);
       } else if (key === "repeatRate") {
-        cmp = a.repeatRate - b.repeatRate;
+        cmp = (a.repeatRate || 0) - (b.repeatRate || 0);
       } else {
-        cmp = a.totalCount - b.totalCount;
+        cmp = (a.totalCount || 0) - (b.totalCount || 0);
       }
       if (cmp !== 0) {
         return cmp * dir;
       }
       if (b.totalCount !== a.totalCount) {
-        return b.totalCount - a.totalCount;
+        return (b.totalCount || 0) - (a.totalCount || 0);
       }
       return a.sortLabel.localeCompare(b.sortLabel);
     });
@@ -462,6 +511,9 @@
     searchCountBadge: document.getElementById("search-count-badge"),
     searchClearBtn: document.getElementById("search-clear-btn"),
 
+    viewTabSingle: document.getElementById("view-tab-single"),
+    viewTabSequence: document.getElementById("view-tab-sequence"),
+    groupControlWrap: document.getElementById("group-control-wrap"),
     groupBtnCommand: document.getElementById("group-btn-command"),
     groupBtnKey: document.getElementById("group-btn-key"),
 
@@ -470,6 +522,8 @@
     tsvDropdown: document.getElementById("tsv-dropdown"),
     globalActionsGroup: document.getElementById("global-actions-group"),
 
+    rankingTheadSingle: document.getElementById("ranking-thead-single"),
+    rankingTheadSequence: document.getElementById("ranking-thead-sequence"),
     rankingTbody: document.getElementById("ranking-tbody"),
 
     // Modals & Toast
@@ -942,11 +996,18 @@
 
     // 5. 集計・グルーピング・ソート
     const aggregated = aggregateBySelectedExts(activeStatsByExt, selectedExts);
-    const allBuiltRows = buildRankingRows(
-      aggregated.totalStats,
-      aggregated.nonConsecutiveStats,
-      state.groupMode,
-    );
+    const isSequenceTab = state.viewTab === "sequence";
+
+    let allBuiltRows;
+    if (isSequenceTab) {
+      allBuiltRows = buildSequenceRankingRows(aggregated.sequenceStats);
+    } else {
+      allBuiltRows = buildRankingRows(
+        aggregated.totalStats,
+        aggregated.nonConsecutiveStats,
+        state.groupMode,
+      );
+    }
     const visibleRows = filterAndSortRows(allBuiltRows);
 
     const scopeLabel = isSessionMode ? "セッション統計" : "メイン統計";
@@ -957,64 +1018,114 @@
       visibleRows,
       totalInputs: aggregated.totalInputs,
       totalNonConsecutive: aggregated.totalNonConsecutive,
+      totalSequences: aggregated.totalSequences,
       scopeLabel,
       extSummaryLabel,
     };
 
     // 6. KPI カード更新
-    const consecutiveInputs =
-      aggregated.totalInputs - aggregated.totalNonConsecutive;
-    const repeatRateNum =
-      aggregated.totalInputs > 0
-        ? (consecutiveInputs / aggregated.totalInputs) * 100
-        : 0;
+    if (isSequenceTab) {
+      let sameSeqCount = 0;
+      let diffSeqCount = 0;
+      for (let i = 0; i < allBuiltRows.length; i++) {
+        if (allBuiltRows[i].seqType === "same") {
+          sameSeqCount += allBuiltRows[i].totalCount;
+        } else {
+          diffSeqCount += allBuiltRows[i].totalCount;
+        }
+      }
+      const totalSeq = aggregated.totalSequences;
+      const samePct = totalSeq > 0 ? (sameSeqCount / totalSeq) * 100 : 0;
 
-    els.kpiTitleTotal.textContent = isSessionMode
-      ? "セッション総入力 (全入力)"
-      : "総入力回数 (全入力)";
-    els.kpiTotalInputs.textContent = aggregated.totalInputs.toLocaleString();
+      els.kpiTitleTotal.textContent = isSessionMode
+        ? "セッション総組み合わせ"
+        : "総キー組み合わせ数";
+      els.kpiTotalInputs.textContent = totalSeq.toLocaleString();
+      els.kpiSubTotal.textContent =
+        selectedExts.length > 0
+          ? `対象: ${extSummaryLabel}`
+          : "2秒以内のキー連続遷移回数";
 
-    if (isSessionMode) {
-      const durMs = calculateLiveSessionMs();
-      if (durMs >= 5000 && aggregated.totalInputs > 0) {
-        const perMin = (aggregated.totalInputs / (durMs / 60000)).toFixed(1);
-        els.kpiSubTotal.textContent = `平均ペース: ${perMin} 回/分`;
+      els.kpiNonConsecutive.textContent = diffSeqCount.toLocaleString();
+      els.kpiSubNonConsecutive.textContent = "異なるキーへの遷移 (A → B)";
+
+      els.kpiRepeatRate.textContent = samePct.toFixed(1);
+      els.kpiRepeatBar.style.width = `${Math.min(100, Math.max(0, samePct)).toFixed(1)}%`;
+      els.kpiSubRepeat.textContent = `同一キー連続 (A → A): ${sameSeqCount.toLocaleString()} 回`;
+
+      els.kpiTitleUnique.textContent = "登録組み合わせ数";
+      els.kpiUniqueCount.textContent = allBuiltRows.length.toLocaleString();
+      els.kpiUniqueUnit.textContent = "種類";
+
+      if (allBuiltRows.length > 0) {
+        let topRow = allBuiltRows[0];
+        for (let i = 1; i < allBuiltRows.length; i++) {
+          if (allBuiltRows[i].totalCount > topRow.totalCount) {
+            topRow = allBuiltRows[i];
+          }
+        }
+        els.kpiSubTop.textContent = `最頻出: ${topRow.fromParsed.shortcut} → ${topRow.toParsed.shortcut}`;
+        els.kpiSubTop.title = els.kpiSubTop.textContent;
+      } else {
+        els.kpiSubTop.textContent = "最頻出: -";
+        els.kpiSubTop.title = "";
+      }
+    } else {
+      const consecutiveInputs =
+        aggregated.totalInputs - aggregated.totalNonConsecutive;
+      const repeatRateNum =
+        aggregated.totalInputs > 0
+          ? (consecutiveInputs / aggregated.totalInputs) * 100
+          : 0;
+
+      els.kpiTitleTotal.textContent = isSessionMode
+        ? "セッション総入力 (全入力)"
+        : "総入力回数 (全入力)";
+      els.kpiTotalInputs.textContent = aggregated.totalInputs.toLocaleString();
+
+      if (isSessionMode) {
+        const durMs = calculateLiveSessionMs();
+        if (durMs >= 5000 && aggregated.totalInputs > 0) {
+          const perMin = (aggregated.totalInputs / (durMs / 60000)).toFixed(1);
+          els.kpiSubTotal.textContent = `平均ペース: ${perMin} 回/分`;
+        } else {
+          els.kpiSubTotal.textContent =
+            selectedExts.length > 0
+              ? `対象: ${extSummaryLabel}`
+              : "セッション中の総実行回数";
+        }
       } else {
         els.kpiSubTotal.textContent =
           selectedExts.length > 0
-            ? `対象: ${extSummaryLabel}`
-            : "セッション中の総実行回数";
+            ? `フィルタ中: ${extSummaryLabel}`
+            : `全 ${extInfo.list.length} 拡張子の合計`;
       }
-    } else {
-      els.kpiSubTotal.textContent =
-        selectedExts.length > 0
-          ? `フィルタ中: ${extSummaryLabel}`
-          : `全 ${extInfo.list.length} 拡張子の合計`;
-    }
 
-    els.kpiNonConsecutive.textContent =
-      aggregated.totalNonConsecutive.toLocaleString();
-    els.kpiRepeatRate.textContent = repeatRateNum.toFixed(1);
-    els.kpiRepeatBar.style.width = `${Math.min(100, Math.max(0, repeatRateNum)).toFixed(1)}%`;
-    els.kpiSubRepeat.textContent = `連続打鍵: ${consecutiveInputs.toLocaleString()} 回`;
+      els.kpiNonConsecutive.textContent =
+        aggregated.totalNonConsecutive.toLocaleString();
+      els.kpiSubNonConsecutive.textContent = "同一キー連続入力を1回として集計";
+      els.kpiRepeatRate.textContent = repeatRateNum.toFixed(1);
+      els.kpiRepeatBar.style.width = `${Math.min(100, Math.max(0, repeatRateNum)).toFixed(1)}%`;
+      els.kpiSubRepeat.textContent = `連続打鍵: ${consecutiveInputs.toLocaleString()} 回`;
 
-    els.kpiTitleUnique.textContent =
-      state.groupMode === "key" ? "使用物理キー数" : "使用コマンド数";
-    els.kpiUniqueCount.textContent = allBuiltRows.length.toLocaleString();
-    els.kpiUniqueUnit.textContent = state.groupMode === "key" ? "キー" : "項目";
+      els.kpiTitleUnique.textContent =
+        state.groupMode === "key" ? "使用物理キー数" : "使用コマンド数";
+      els.kpiUniqueCount.textContent = allBuiltRows.length.toLocaleString();
+      els.kpiUniqueUnit.textContent = state.groupMode === "key" ? "キー" : "項目";
 
-    if (allBuiltRows.length > 0) {
-      let topRow = allBuiltRows[0];
-      for (let i = 1; i < allBuiltRows.length; i++) {
-        if (allBuiltRows[i].totalCount > topRow.totalCount) {
-          topRow = allBuiltRows[i];
+      if (allBuiltRows.length > 0) {
+        let topRow = allBuiltRows[0];
+        for (let i = 1; i < allBuiltRows.length; i++) {
+          if (allBuiltRows[i].totalCount > topRow.totalCount) {
+            topRow = allBuiltRows[i];
+          }
         }
+        els.kpiSubTop.textContent = `最頻出: ${topRow.shortcut}${topRow.commandLabel ? ` (${topRow.commandLabel})` : ""}`;
+        els.kpiSubTop.title = els.kpiSubTop.textContent;
+      } else {
+        els.kpiSubTop.textContent = "最頻出: -";
+        els.kpiSubTop.title = "";
       }
-      els.kpiSubTop.textContent = `最頻出: ${topRow.shortcut}${topRow.commandLabel ? ` (${topRow.commandLabel})` : ""}`;
-      els.kpiSubTop.title = els.kpiSubTop.textContent;
-    } else {
-      els.kpiSubTop.textContent = "最頻出: -";
-      els.kpiSubTop.title = "";
     }
 
     // 7. タイマー・差分描画
@@ -1022,6 +1133,15 @@
     renderDiffSection();
 
     // 8. ツールバー同期
+    els.viewTabSingle.classList.toggle("active", !isSequenceTab);
+    els.viewTabSequence.classList.toggle("active", isSequenceTab);
+    els.groupControlWrap.classList.toggle("hidden", isSequenceTab);
+    els.rankingTheadSingle.classList.toggle("hidden", isSequenceTab);
+    els.rankingTheadSequence.classList.toggle("hidden", !isSequenceTab);
+    els.searchInput.placeholder = isSequenceTab
+      ? "キー名・コマンド名・遷移種別で絞り込み (/ でフォーカス)..."
+      : "コマンド名・キーで絞り込み (/ でフォーカス)...";
+
     els.groupBtnCommand.classList.toggle("active", state.groupMode === "command");
     els.groupBtnKey.classList.toggle("active", state.groupMode === "key");
 
@@ -1051,18 +1171,37 @@
       }
     });
 
-    ["key", "total", "nonConsecutive", "repeatRate"].forEach((colKey) => {
-      const ind = document.getElementById(`sort-ind-${colKey}`);
-      const th = ind ? ind.closest("th") : null;
-      if (!ind || !th) return;
-      if (state.sortKey === colKey) {
-        th.classList.add("sorted");
-        ind.textContent = state.sortDir === "asc" ? "↑" : "↓";
-      } else {
-        th.classList.remove("sorted");
-        ind.textContent = "";
-      }
-    });
+    if (isSequenceTab) {
+      [
+        { key: "key", indId: "sort-ind-seq-key" },
+        { key: "total", indId: "sort-ind-seq-total" },
+        { key: "seqType", indId: "sort-ind-seq-type" },
+      ].forEach(({ key: colKey, indId }) => {
+        const ind = document.getElementById(indId);
+        const th = ind ? ind.closest("th") : null;
+        if (!ind || !th) return;
+        if (state.sortKey === colKey) {
+          th.classList.add("sorted");
+          ind.textContent = state.sortDir === "asc" ? "↑" : "↓";
+        } else {
+          th.classList.remove("sorted");
+          ind.textContent = "";
+        }
+      });
+    } else {
+      ["key", "total", "nonConsecutive", "repeatRate"].forEach((colKey) => {
+        const ind = document.getElementById(`sort-ind-${colKey}`);
+        const th = ind ? ind.closest("th") : null;
+        if (!ind || !th) return;
+        if (state.sortKey === colKey) {
+          th.classList.add("sorted");
+          ind.textContent = state.sortDir === "asc" ? "↑" : "↓";
+        } else {
+          th.classList.remove("sorted");
+          ind.textContent = "";
+        }
+      });
+    }
 
     // 9. ランキングテーブル描画
     renderRankingTableBody(
@@ -1070,8 +1209,109 @@
       allBuiltRows.length,
       aggregated.totalInputs,
       aggregated.totalNonConsecutive,
+      aggregated.totalSequences,
       isSessionMode,
+      isSequenceTab,
     );
+  }
+
+  function renderSequenceTableBody(
+    visibleRows,
+    unfilteredCount,
+    totalSequences,
+    isSessionMode,
+  ) {
+    if (unfilteredCount === 0) {
+      const emptyTitle = isSessionMode
+        ? "セッション中のキー組み合わせ記録はまだありません"
+        : "まだキー組み合わせの記録がありません";
+      const emptyDesc =
+        "キーを連続して入力すると（2秒以内）、直前のキーからの遷移が自動集計されます。";
+
+      els.rankingTbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="empty-state-cell">
+            <div class="empty-state-title">${emptyTitle}</div>
+            <div class="empty-state-desc">${emptyDesc}</div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    if (visibleRows.length === 0) {
+      els.rankingTbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="empty-state-cell">
+            <div class="empty-state-title">「${escapeHtml(state.searchQuery.trim())}」に一致する組み合わせはありません</div>
+            <div class="empty-state-desc">検索キーワードを変更するか、Esc キーで検索をクリアしてください。</div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    let maxTotal = 1;
+    for (let i = 0; i < visibleRows.length; i++) {
+      if (visibleRows[i].totalCount > maxTotal) {
+        maxTotal = visibleRows[i].totalCount;
+      }
+    }
+
+    const htmlChunks = [];
+    for (let idx = 0; idx < visibleRows.length; idx++) {
+      const row = visibleRows[idx];
+      const rank = idx + 1;
+      const totalPct =
+        totalSequences > 0
+          ? ((row.totalCount / totalSequences) * 100).toFixed(1)
+          : "0.0";
+      const totalBarWidth = Math.max(
+        2,
+        Math.round((row.totalCount / maxTotal) * 100),
+      );
+
+      const fromCmd = row.fromParsed.commandLabel
+        ? `<span class="cmd-name">${escapeHtml(row.fromParsed.commandLabel)}</span>`
+        : "";
+      const toCmd = row.toParsed.commandLabel
+        ? `<span class="cmd-name">${escapeHtml(row.toParsed.commandLabel)}</span>`
+        : "";
+
+      const comboCell = `
+        <div class="shortcut-cell">
+          <div class="shortcut-main">
+            ${renderShortcutKbdHtml(row.fromParsed.shortcut)}
+            ${fromCmd}
+            <span class="seq-arrow" title="から遷移">→</span>
+            ${renderShortcutKbdHtml(row.toParsed.shortcut)}
+            ${toCmd}
+          </div>
+        </div>`;
+
+      const typePillClass =
+        row.seqType === "same" ? "type-pill same" : "type-pill diff";
+
+      htmlChunks.push(`
+        <tr class="ranking-row">
+          <td class="col-rank ${rank <= 3 ? "rank-top" : ""}">${rank}</td>
+          <td class="col-shortcut">${comboCell}</td>
+          <td class="col-metric">
+            <div class="metric-cell">
+              <div class="metric-numbers">
+                <span class="metric-count">${row.totalCount.toLocaleString()}</span>
+                <span class="metric-pct">(${totalPct}%)</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" style="width:${totalBarWidth}%"></div>
+              </div>
+            </div>
+          </td>
+          <td class="col-rate">
+            <span class="${typePillClass}">${escapeHtml(row.seqTypeLabel)}</span>
+          </td>
+        </tr>`);
+    }
+
+    els.rankingTbody.innerHTML = htmlChunks.join("");
   }
 
   function renderRankingTableBody(
@@ -1079,8 +1319,19 @@
     unfilteredCount,
     totalInputs,
     totalNonConsecutive,
+    totalSequences,
     isSessionMode,
+    isSequenceTab,
   ) {
+    if (isSequenceTab) {
+      renderSequenceTableBody(
+        visibleRows,
+        unfilteredCount,
+        totalSequences,
+        isSessionMode,
+      );
+      return;
+    }
     if (unfilteredCount === 0) {
       const emptyTitle = isSessionMode
         ? "セッション中のショートカット記録はまだありません"
@@ -1266,12 +1517,35 @@
       visibleRows,
       totalInputs,
       totalNonConsecutive,
+      totalSequences,
       scopeLabel,
       extSummaryLabel,
     } = currentFilteredContext;
 
     if (visibleRows.length === 0) {
       showToast(`コピー対象の${scopeLabel}データがありません`, "info");
+      return;
+    }
+
+    if (state.viewTab === "sequence") {
+      const baseSeqTotal =
+        totalSequences || visibleRows.reduce((s, r) => s + r.totalCount, 0);
+      const header = "キーの組み合わせ\t回数\tパーセント\t遷移種別";
+      const lines = visibleRows.map((r) => {
+        const pct =
+          baseSeqTotal > 0
+            ? ((r.totalCount / baseSeqTotal) * 100).toFixed(1)
+            : "0.0";
+        return `${r.tsvKey}\t${r.totalCount}\t${pct}%\t${r.seqTypeLabel}`;
+      });
+      const tsvText = [header, ...lines].join("\n");
+      const formatDesc = "キー組み合わせTSV";
+
+      vscode.postMessage({
+        command: "copyDirectText",
+        text: tsvText,
+        infoMessage: `[${scopeLabel} / ${extSummaryLabel}] ${formatDesc}（${visibleRows.length} 件）をコピーしました`,
+      });
       return;
     }
 
@@ -1370,6 +1644,18 @@
         const nextMode = actionEl.getAttribute("data-mode");
         if (nextMode === "global" || nextMode === "session") {
           state.mode = nextMode;
+          persistState();
+          renderAll();
+        }
+        break;
+      }
+
+      case "set-view-tab": {
+        const nextTab = actionEl.getAttribute("data-view-tab");
+        if (nextTab === "single" || nextTab === "sequence") {
+          state.viewTab = nextTab;
+          state.sortKey = "total";
+          state.sortDir = "desc";
           persistState();
           renderAll();
         }

@@ -23,6 +23,7 @@ class StatsStore {
     loaded = false;
     statsByExt = {};
     lastTrackedKey;
+    lastTrackedTime;
     sessionData = {
         isActive: false,
         accumulatedMs: 0,
@@ -193,15 +194,28 @@ class StatsStore {
      */
     recordKey(keyName) {
         this.ensureLoaded();
+        const now = Date.now();
         const ext = this.getActiveFileExtension();
         const isConsecutive = this.lastTrackedKey === keyName;
+        // キー組み合わせ（シーケンス）の判定
+        let seqKey;
+        if (this.lastTrackedKey && this.lastTrackedTime !== undefined) {
+            const timeoutMs = vscode.workspace
+                .getConfiguration("shortcutTracker")
+                .get("sequenceTimeoutMs", 2000) || 2000;
+            if (now - this.lastTrackedTime <= timeoutMs) {
+                seqKey = `${this.lastTrackedKey} -> ${keyName}`;
+            }
+        }
         this.lastTrackedKey = keyName;
+        this.lastTrackedTime = now;
         this.dirtyLastKey = true;
         let extStats = this.statsByExt[ext];
         if (!extStats) {
             extStats = {
                 shortcutStats: {},
                 shortcutStatsNonConsecutive: {},
+                sequenceStats: {},
             };
             this.statsByExt[ext] = extStats;
         }
@@ -211,6 +225,13 @@ class StatsStore {
             extStats.shortcutStatsNonConsecutive[keyName] =
                 (extStats.shortcutStatsNonConsecutive[keyName] || 0) + 1;
         }
+        if (seqKey) {
+            if (!extStats.sequenceStats) {
+                extStats.sequenceStats = {};
+            }
+            extStats.sequenceStats[seqKey] =
+                (extStats.sequenceStats[seqKey] || 0) + 1;
+        }
         this.dirtyStats = true;
         if (this.sessionData.isActive) {
             let sessionExt = this.sessionData.statsByExt[ext];
@@ -218,6 +239,7 @@ class StatsStore {
                 sessionExt = {
                     shortcutStats: {},
                     shortcutStatsNonConsecutive: {},
+                    sequenceStats: {},
                 };
                 this.sessionData.statsByExt[ext] = sessionExt;
             }
@@ -226,6 +248,13 @@ class StatsStore {
             if (!isConsecutive) {
                 sessionExt.shortcutStatsNonConsecutive[keyName] =
                     (sessionExt.shortcutStatsNonConsecutive[keyName] || 0) + 1;
+            }
+            if (seqKey) {
+                if (!sessionExt.sequenceStats) {
+                    sessionExt.sequenceStats = {};
+                }
+                sessionExt.sequenceStats[seqKey] =
+                    (sessionExt.sequenceStats[seqKey] || 0) + 1;
             }
             this.sessionData.lastHeartbeatAt = new Date().toISOString();
             this.dirtySession = true;
@@ -270,6 +299,7 @@ class StatsStore {
         this.ensureLoaded();
         this.statsByExt = {};
         this.lastTrackedKey = undefined;
+        this.lastTrackedTime = undefined;
         this.dirtyStats = false;
         this.dirtyLastKey = false;
         this.notifyChanged();
@@ -294,6 +324,7 @@ class StatsStore {
     }
     async resetSession() {
         this.ensureLoaded();
+        this.lastTrackedTime = undefined;
         await this.setInitialKeybindings(undefined);
         this.sessionData = {
             isActive: false,

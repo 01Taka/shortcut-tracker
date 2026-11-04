@@ -5,6 +5,7 @@ exports.formatDuration = formatDuration;
 exports.formatLocalTimestamp = formatLocalTimestamp;
 exports.sanitizeFileSegment = sanitizeFileSegment;
 exports.aggregateStats = aggregateStats;
+exports.formatSequenceTsv = formatSequenceTsv;
 exports.formatTsv = formatTsv;
 exports.formatUnifiedTsv = formatUnifiedTsv;
 exports.escapeHtml = escapeHtml;
@@ -65,8 +66,10 @@ function sanitizeFileSegment(raw) {
 function aggregateStats(statsByExt, filterExtensions) {
     const totalStats = {};
     const nonConsecutiveStats = {};
+    const sequenceStats = {};
     let totalInputs = 0;
     let totalNonConsecutive = 0;
+    let totalSequences = 0;
     const filterSet = filterExtensions ? new Set(filterExtensions) : undefined;
     for (const ext of Object.keys(statsByExt)) {
         if (filterSet && !filterSet.has(ext)) {
@@ -88,13 +91,40 @@ function aggregateStats(statsByExt, filterExtensions) {
                 totalNonConsecutive += count;
             }
         }
+        if (data.sequenceStats) {
+            for (const [seqKey, count] of Object.entries(data.sequenceStats)) {
+                sequenceStats[seqKey] = (sequenceStats[seqKey] || 0) + count;
+                totalSequences += count;
+            }
+        }
     }
     return {
         totalStats,
         nonConsecutiveStats,
+        sequenceStats,
         totalInputs,
         totalNonConsecutive,
+        totalSequences,
     };
+}
+function formatSequenceTsv(sequenceStats) {
+    const sorted = Object.entries(sequenceStats).sort((a, b) => b[1] - a[1]);
+    const header = "キーの組み合わせ\t回数\tパーセント";
+    if (sorted.length === 0) {
+        return header;
+    }
+    let total = 0;
+    for (let i = 0; i < sorted.length; i++) {
+        total += sorted[i][1];
+    }
+    const rows = new Array(sorted.length + 1);
+    rows[0] = header;
+    for (let i = 0; i < sorted.length; i++) {
+        const [key, count] = sorted[i];
+        const pct = total > 0 ? ((count / total) * 100).toFixed(1) : "0.0";
+        rows[i + 1] = `${key}\t${count}\t${pct}%`;
+    }
+    return rows.join("\n");
 }
 function formatTsv(stats) {
     const sorted = Object.entries(stats).sort((a, b) => b[1] - a[1]);

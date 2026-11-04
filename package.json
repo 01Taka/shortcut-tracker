@@ -75,6 +75,18 @@
           "when": "false"
         }
       ]
+    },
+    "configuration": {
+      "title": "Shortcut Tracker",
+      "properties": {
+        "shortcutTracker.sequenceTimeoutMs": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 100,
+          "maximum": 60000,
+          "description": "キーの組み合わせ（直前のキーから次のキーへの連続）として判定するタイムアウト時間（ミリ秒）"
+        }
+      }
     }
   },
   "scripts": {

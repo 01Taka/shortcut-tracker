@@ -274,7 +274,30 @@
           </button>
         </div>
 
-        <div class="segmented-control" role="group" aria-label="集計単位の切替">
+        <div class="segmented-control" role="group" aria-label="表示対象の切替">
+          <button
+            type="button"
+            id="view-tab-single"
+            class="seg-btn active"
+            data-action="set-view-tab"
+            data-view-tab="single"
+            title="単体キーショートカットの利用統計を表示します"
+          >
+            単体キー
+          </button>
+          <button
+            type="button"
+            id="view-tab-sequence"
+            class="seg-btn"
+            data-action="set-view-tab"
+            data-view-tab="sequence"
+            title="キーの組み合わせ（直前のキー → 次のキー）の遷移統計を表示します"
+          >
+            キー組み合わせ
+          </button>
+        </div>
+
+        <div class="segmented-control" id="group-control-wrap" role="group" aria-label="集計単位の切替">
           <button
             type="button"
             id="group-btn-command"
@@ -387,7 +410,7 @@
     <section class="table-container" aria-label="ショートカット使用ランキング">
       <table class="data-table ranking-table">
         <thead>
-          <tr>
+          <tr id="ranking-thead-single">
             <th class="col-rank">#</th>
             <th class="col-shortcut sortable" data-action="sort-column" data-sort-key="key">
               <span class="th-inner">
@@ -411,6 +434,27 @@
               <span class="th-inner right">
                 <span>リピート率</span>
                 <span class="sort-indicator" id="sort-ind-repeatRate"></span>
+              </span>
+            </th>
+          </tr>
+          <tr id="ranking-thead-sequence" class="hidden">
+            <th class="col-rank">#</th>
+            <th class="col-shortcut sortable" data-action="sort-column" data-sort-key="key">
+              <span class="th-inner">
+                <span>キーの組み合わせ (直前 → 今回)</span>
+                <span class="sort-indicator" id="sort-ind-seq-key"></span>
+              </span>
+            </th>
+            <th class="col-metric sortable" data-action="sort-column" data-sort-key="total">
+              <span class="th-inner right">
+                <span>実行回数 (回数・割合)</span>
+                <span class="sort-indicator" id="sort-ind-seq-total">↓</span>
+              </span>
+            </th>
+            <th class="col-rate sortable" data-action="sort-column" data-sort-key="seqType">
+              <span class="th-inner right">
+                <span>遷移種別</span>
+                <span class="sort-indicator" id="sort-ind-seq-type"></span>
               </span>
             </th>
           </tr>
