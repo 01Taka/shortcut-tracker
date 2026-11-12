@@ -5,9 +5,8 @@ out/**/*.map
 node_modules/**
 shortcuts-log/**
 *.vsix
+vsix/**
 *.jsonc
-extract-group-commands.js
-unwrap-keybindings.js
-group-commands.json
+scripts/**
 tsconfig.json
 .gitignore

@@ -5,8 +5,12 @@ node_modules/
 out/
 dist/
 
+# Script outputs
+scripts/output/
+
 # VS Code Extension packaging
 *.vsix
+vsix/
 
 # VS Code test running
 .vscode-test/

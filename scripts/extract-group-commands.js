@@ -15,14 +15,19 @@ const DEFAULT_INPUT_PATH = path.join(
 );
 
 // フォールバック用の最新ログファイル
-const FALLBACK_INPUT_PATH = path.join(
-  process.cwd(),
+const FALLBACK_INPUT_PATH = path.resolve(
+  __dirname,
+  "..",
   "shortcuts-log",
   "2026-10-18-v3.jsonc"
 );
 
 // デフォルトの出力パス
-const DEFAULT_OUTPUT_PATH = path.join(process.cwd(), "group-commands.json");
+const DEFAULT_OUTPUT_PATH = path.join(
+  __dirname,
+  "output",
+  "group-commands.json"
+);
 
 // ----------------------------------------------------
 // ヘルパー関数
@@ -198,6 +203,7 @@ function run() {
       totalCommands += cmds.length;
     }
 
+    fs.mkdirSync(path.dirname(output), { recursive: true });
     fs.writeFileSync(output, JSON.stringify(groupMap, null, 2), "utf-8");
 
     console.log(`Successfully generated: ${output}`);

@@ -26,11 +26,7 @@ const defaultInputPath = path.join(
   "User",
   "keybindings.json",
 );
-const fallbackInputPath = path.join(
-  process.cwd(),
-  "shortcuts-log",
-  "2026-10-18-v3.jsonc",
-);
+const fallbackInputPath = path.resolve(__dirname, "..", "shortcuts-log", "2026-10-18-v3.jsonc");
 const inputPath = fs.existsSync(defaultInputPath)
   ? defaultInputPath
   : fallbackInputPath;
@@ -107,7 +103,7 @@ function parseCliOptions() {
     } else if (options.isFull) {
       fileName = "keybindings.full.jsonc";
     }
-    options.outputPath = path.join(process.cwd(), fileName);
+    options.outputPath = path.join(__dirname, "output", fileName);
   }
 
   return options;
@@ -400,6 +396,7 @@ function run() {
       options,
     );
 
+    fs.mkdirSync(path.dirname(options.outputPath), { recursive: true });
     fs.writeFileSync(options.outputPath, outputContent, "utf-8");
     console.log(`Successfully generated: ${options.outputPath}`);
     console.log(

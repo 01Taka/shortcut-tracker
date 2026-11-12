@@ -96,7 +96,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "node -e \"require('fs').mkdirSync('vsix', { recursive: true })\" && vsce package --out vsix/"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
