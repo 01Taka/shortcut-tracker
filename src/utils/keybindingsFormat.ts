@@ -158,6 +158,20 @@ function getLineIndentAt(text: string, offset: number): string {
   return text.slice(lineStart, pos);
 }
 
+function isCommandsOnlyArgs(
+  commandArgs: unknown,
+): commandArgs is { commands: unknown[] } {
+  if (!commandArgs || typeof commandArgs !== "object" || Array.isArray(commandArgs)) {
+    return false;
+  }
+  const keys = Object.keys(commandArgs);
+  return (
+    keys.length === 1 &&
+    keys[0] === "commands" &&
+    Array.isArray((commandArgs as Record<string, unknown>).commands)
+  );
+}
+
 /**
  * `myTracker.trackAndRun` の `args` オブジェクトをルールに従って正規化する。
  */
@@ -165,8 +179,20 @@ export function normalizeTrackArgs(
   rawArgs: Record<string, unknown>,
   rootKey?: string,
 ): Record<string, unknown> {
-  const command =
-    typeof rawArgs.command === "string" ? rawArgs.command : undefined;
+  let commandValue: unknown = rawArgs.command;
+  let commandArgsValue: unknown = rawArgs.commandArgs;
+
+  if (commandValue === "runCommands" && isCommandsOnlyArgs(commandArgsValue)) {
+    commandValue = commandArgsValue.commands;
+    commandArgsValue = undefined;
+  }
+
+  const effectiveCommandName = Array.isArray(commandValue)
+    ? "runCommands"
+    : typeof commandValue === "string"
+      ? commandValue
+      : undefined;
+
   let keyName =
     typeof rawArgs.keyName === "string" ? rawArgs.keyName : undefined;
   let nameSuffix =
@@ -189,7 +215,10 @@ export function normalizeTrackArgs(
       keyName = withoutParenKey;
     }
 
-    if (keyName === "" || (command !== undefined && keyName === command)) {
+    if (
+      keyName === "" ||
+      (effectiveCommandName !== undefined && keyName === effectiveCommandName)
+    ) {
       keyName = undefined;
     }
   }
@@ -211,13 +240,11 @@ export function normalizeTrackArgs(
   if (nameSuffix !== undefined) {
     ordered.nameSuffix = nameSuffix;
   }
-  if (command !== undefined) {
-    ordered.command = command;
-  } else if (rawArgs.command !== undefined) {
-    ordered.command = rawArgs.command;
+  if (commandValue !== undefined) {
+    ordered.command = commandValue;
   }
-  if (rawArgs.commandArgs !== undefined) {
-    ordered.commandArgs = rawArgs.commandArgs;
+  if (commandArgsValue !== undefined) {
+    ordered.commandArgs = commandArgsValue;
   }
 
   const handledKeys = new Set([

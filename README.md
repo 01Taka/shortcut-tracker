@@ -19,12 +19,12 @@ interface KeybindingEntry {
 interface TrackArgs {
   /** 統計表示時に末尾へ `(key)` として付与されるキー表記（例: `"alt+h"`, `"shift+alt+k"`） */
   key?: string;
-  /** 統計上のベース名。省略時は `command` を使用。指定時は `command` より優先（`runCommands` 等に推奨） */
+  /** 統計上のベース名。省略時は `command`（配列の場合は `"runCommands"`）を使用。指定時は `command` より優先 */
   keyName?: string;
   /** ベース名の後ろに `:nameSuffix` として連結されるサフィックス（例: `"up"`, `"selection"`） */
   nameSuffix?: string;
-  /** 実際に実行する VS Code コマンド ID */
-  command: string;
+  /** 実際に実行する VS Code コマンド ID。配列を渡すと `runCommands`（`{ commands: [...] }`）として実行 */
+  command: string | unknown[];
   /** `command` 実行時に渡す引数 */
   commandArgs?: unknown;
 }
@@ -82,7 +82,7 @@ interface TrackArgs {
 ```
 → `"editorScroll:up (shift+alt+k)"` として記録されます。
 
-#### 3. `runCommands` 等でオリジナルの `keyName` を指定する例
+#### 3. `runCommands` を配列ショートハンドで記述する例
 
 ```jsonc
 {
@@ -90,18 +90,15 @@ interface TrackArgs {
   "command": "myTracker.trackAndRun",
   "args": {
     "key": "ctrl+alt+r",
-    "keyName": "MyMacro",
-    "nameSuffix": "v2",
-    "command": "runCommands",
-    "commandArgs": {
-      "commands": [
-        "editor.action.copyLinesDownAction"
-      ]
-    }
+    "keyName": "focusAndTop",
+    "command": [
+      "workbench.action.focusActiveEditorGroup",
+      "cursorTop"
+    ]
   }
 }
 ```
-→ `"MyMacro:v2 (ctrl+alt+r)"` として記録されます。
+→ `runCommands`（`{ commands: ["workbench.action.focusActiveEditorGroup", "cursorTop"] }`）として実行され、`"focusAndTop (ctrl+alt+r)"` として記録されます（`keyName` 省略時は `"runCommands (ctrl+alt+r)"`）。
 
 ---
 

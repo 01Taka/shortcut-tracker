@@ -14,7 +14,10 @@ export type {
 let activeStore: StatsStore | undefined;
 
 function buildTrackedKeyName(args: TrackArgs): string {
-  const baseName = args.keyName || args.command;
+  const defaultName = Array.isArray(args.command)
+    ? "runCommands"
+    : args.command;
+  const baseName = args.keyName || defaultName;
   const withSuffix = args.nameSuffix
     ? `${baseName}:${args.nameSuffix}`
     : baseName;
@@ -49,14 +52,21 @@ export function activate(context: vscode.ExtensionContext): void {
   const trackAndRun = vscode.commands.registerCommand(
     "myTracker.trackAndRun",
     (args: TrackArgs) => {
-      if (!args || !args.command) {
+      if (
+        !args ||
+        (typeof args.command !== "string" && !Array.isArray(args.command)) ||
+        args.command === ""
+      ) {
         return;
       }
 
       store.recordKey(buildTrackedKeyName(args));
 
-      const execution =
-        args.commandArgs !== undefined
+      const execution = Array.isArray(args.command)
+        ? vscode.commands.executeCommand("runCommands", {
+            commands: args.command,
+          })
+        : args.commandArgs !== undefined
           ? vscode.commands.executeCommand(args.command, args.commandArgs)
           : vscode.commands.executeCommand(args.command);
 

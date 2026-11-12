@@ -6,7 +6,10 @@ const vscode = require("vscode");
 const statsStore_1 = require("./store/statsStore");
 let activeStore;
 function buildTrackedKeyName(args) {
-    const baseName = args.keyName || args.command;
+    const defaultName = Array.isArray(args.command)
+        ? "runCommands"
+        : args.command;
+    const baseName = args.keyName || defaultName;
     const withSuffix = args.nameSuffix
         ? `${baseName}:${args.nameSuffix}`
         : baseName;
@@ -33,13 +36,19 @@ function activate(context) {
     };
     // 1. 汎用ラッパーコマンド（ホットパス: インメモリO(1)記録 + 即座に本来のコマンドを実行）
     const trackAndRun = vscode.commands.registerCommand("myTracker.trackAndRun", (args) => {
-        if (!args || !args.command) {
+        if (!args ||
+            (typeof args.command !== "string" && !Array.isArray(args.command)) ||
+            args.command === "") {
             return;
         }
         store.recordKey(buildTrackedKeyName(args));
-        const execution = args.commandArgs !== undefined
-            ? vscode.commands.executeCommand(args.command, args.commandArgs)
-            : vscode.commands.executeCommand(args.command);
+        const execution = Array.isArray(args.command)
+            ? vscode.commands.executeCommand("runCommands", {
+                commands: args.command,
+            })
+            : args.commandArgs !== undefined
+                ? vscode.commands.executeCommand(args.command, args.commandArgs)
+                : vscode.commands.executeCommand(args.command);
         return execution.then(undefined, (error) => {
             console.error(`Command execution failed: ${args.command}`, error);
         });
