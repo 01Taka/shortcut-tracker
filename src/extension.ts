@@ -13,6 +13,14 @@ export type {
 
 let activeStore: StatsStore | undefined;
 
+function buildTrackedKeyName(args: TrackArgs): string {
+  const baseName = args.keyName || args.command;
+  const withSuffix = args.nameSuffix
+    ? `${baseName}:${args.nameSuffix}`
+    : baseName;
+  return args.key ? `${withSuffix} (${args.key})` : withSuffix;
+}
+
 /**
  * 拡張機能エントリポイント（高速起動設計）
  * - 起動時は最小限のストア生成とコマンド登録のみを同期実行（< 1ms）
@@ -41,11 +49,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const trackAndRun = vscode.commands.registerCommand(
     "myTracker.trackAndRun",
     (args: TrackArgs) => {
-      if (!args || !args.keyName || !args.command) {
+      if (!args || !args.command) {
         return;
       }
 
-      store.recordKey(args.keyName);
+      store.recordKey(buildTrackedKeyName(args));
 
       const execution =
         args.commandArgs !== undefined
@@ -108,6 +116,10 @@ export function activate(context: vscode.ExtensionContext): void {
     registerLazyCommand(
       "myTracker.exportSessionToDirectory",
       (m) => m.exportSessionToDirectoryAction,
+    ),
+    registerLazyCommand(
+      "myTracker.formatKeybindingsJson",
+      (m) => m.formatKeybindingsJsonAction,
     ),
   );
 }

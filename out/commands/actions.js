@@ -12,10 +12,12 @@ exports.copySessionJsonAction = copySessionJsonAction;
 exports.copySessionTsvAction = copySessionTsvAction;
 exports.copyKeybindingsDiffJsonAction = copyKeybindingsDiffJsonAction;
 exports.exportSessionToDirectoryAction = exportSessionToDirectoryAction;
+exports.formatKeybindingsJsonAction = formatKeybindingsJsonAction;
 const vscode = require("vscode");
 const keybindingsService_1 = require("../services/keybindingsService");
 const sessionService_1 = require("../services/sessionService");
 const statsPanel_1 = require("../ui/statsPanel");
+const keybindingsFormat_1 = require("../utils/keybindingsFormat");
 const statsFormat_1 = require("../utils/statsFormat");
 async function showStatsAction(store) {
     await (0, statsPanel_1.openOrRevealStatsPanel)(store, {
@@ -240,5 +242,46 @@ async function copyTsvQuickPickAction(statsByExt, scopeName = "統計", targetTy
         : selectedExts.join(", ");
     await vscode.env.clipboard.writeText(tsv);
     vscode.window.setStatusBarMessage(`[${scopeName} / ${extsLabel}] ${typeLabel} をコピーしました`, 3500);
+}
+/**
+ * アクティブエディタの keybindings JSON/JSONC をフォーマット
+ */
+async function formatKeybindingsJsonAction() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showWarningMessage("アクティブなエディタがありません。");
+        return;
+    }
+    const { document } = editor;
+    if (document.languageId !== "json" && document.languageId !== "jsonc") {
+        vscode.window.showWarningMessage("JSON または JSONC ファイルを開いた状態で実行してください。");
+        return;
+    }
+    const tabSize = typeof editor.options.tabSize === "number" ? editor.options.tabSize : 2;
+    const indentUnit = editor.options.insertSpaces === false ? "\t" : " ".repeat(tabSize);
+    let replacements;
+    try {
+        replacements = (0, keybindingsFormat_1.computeKeybindingsFormatReplacements)(document.getText(), {
+            indentUnit,
+        });
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        vscode.window.showWarningMessage(`有効なJSON配列として解析できないためフォーマットを中止しました: ${message}`);
+        return;
+    }
+    if (replacements.length === 0) {
+        vscode.window.setStatusBarMessage("フォーマット対象の変更はありませんでした", 3000);
+        return;
+    }
+    const applied = await editor.edit((editBuilder) => {
+        for (const r of replacements) {
+            const range = new vscode.Range(document.positionAt(r.start), document.positionAt(r.end));
+            editBuilder.replace(range, r.newText);
+        }
+    });
+    if (applied) {
+        vscode.window.setStatusBarMessage(`${replacements.length} 件のキーバインドをフォーマットしました`, 3500);
+    }
 }
 //# sourceMappingURL=actions.js.map

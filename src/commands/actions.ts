@@ -7,6 +7,7 @@ import {
 import type { StatsStore } from "../store/statsStore";
 import type { ExportDataV2, StatsByExtension } from "../types";
 import { openOrRevealStatsPanel, refreshStatsPanel } from "../ui/statsPanel";
+import { computeKeybindingsFormatReplacements } from "../utils/keybindingsFormat";
 import {
   aggregateStats,
   calculateSessionDurationMs,
@@ -303,4 +304,66 @@ async function copyTsvQuickPickAction(
     `[${scopeName} / ${extsLabel}] ${typeLabel} をコピーしました`,
     3500,
   );
+}
+
+/**
+ * アクティブエディタの keybindings JSON/JSONC をフォーマット
+ */
+export async function formatKeybindingsJsonAction(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage("アクティブなエディタがありません。");
+    return;
+  }
+
+  const { document } = editor;
+  if (document.languageId !== "json" && document.languageId !== "jsonc") {
+    vscode.window.showWarningMessage(
+      "JSON または JSONC ファイルを開いた状態で実行してください。",
+    );
+    return;
+  }
+
+  const tabSize =
+    typeof editor.options.tabSize === "number" ? editor.options.tabSize : 2;
+  const indentUnit =
+    editor.options.insertSpaces === false ? "\t" : " ".repeat(tabSize);
+
+  let replacements;
+  try {
+    replacements = computeKeybindingsFormatReplacements(document.getText(), {
+      indentUnit,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showWarningMessage(
+      `有効なJSON配列として解析できないためフォーマットを中止しました: ${message}`,
+    );
+    return;
+  }
+
+  if (replacements.length === 0) {
+    vscode.window.setStatusBarMessage(
+      "フォーマット対象の変更はありませんでした",
+      3000,
+    );
+    return;
+  }
+
+  const applied = await editor.edit((editBuilder) => {
+    for (const r of replacements) {
+      const range = new vscode.Range(
+        document.positionAt(r.start),
+        document.positionAt(r.end),
+      );
+      editBuilder.replace(range, r.newText);
+    }
+  });
+
+  if (applied) {
+    vscode.window.setStatusBarMessage(
+      `${replacements.length} 件のキーバインドをフォーマットしました`,
+      3500,
+    );
+  }
 }

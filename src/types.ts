@@ -1,5 +1,7 @@
 export interface TrackArgs {
-  keyName: string;
+  key?: string;
+  keyName?: string;
+  nameSuffix?: string;
   command: string;
   commandArgs?: unknown;
 }

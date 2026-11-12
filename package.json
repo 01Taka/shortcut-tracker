@@ -66,6 +66,10 @@
       {
         "command": "myTracker.exportSessionToDirectory",
         "title": "ShortcutStatus Export Session Statistics to Local Directory"
+      },
+      {
+        "command": "myTracker.formatKeybindingsJson",
+        "title": "ShortcutStatus Format Keybindings JSON"
       }
     ],
     "menus": {
