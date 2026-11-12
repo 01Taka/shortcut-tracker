@@ -2,7 +2,7 @@
   "name": "shortcut-tracker",
   "displayName": "Shortcut Tracker",
   "description": "Custom shortcut tracking extension",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "license": "MIT",
   "repository": {
     "type": "git",
